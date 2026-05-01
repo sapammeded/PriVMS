@@ -88,7 +88,6 @@
         .monetization-badge.basic { background: #dbeafe; color: #1e40af; }
         .monetization-badge.pro { background: #d1fae5; color: #065f46; }
         
-        /* vmsSite Modal Styles */
         .vms-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.7); backdrop-filter: blur(4px);
@@ -109,6 +108,15 @@
         .vms-upgrade-hint { background: #fef3c7; padding: 12px; border-radius: 16px; margin-top: 16px; font-size: 0.75rem; color: #92400e; display: flex; align-items: center; gap: 8px; }
         .vms-upgrade-hint button { background: #f59e0b; padding: 6px 12px; font-size: 0.7rem; margin-left: auto; }
         .vms-badge-locked { background: #fee2e2; color: #b91c1c; padding: 2px 8px; border-radius: 20px; font-size: 0.6rem; margin-left: 8px; }
+        
+        /* Queue Status Indicator */
+        .queue-status {
+            position: fixed; bottom: 10px; left: 10px; z-index: 9999;
+            background: rgba(0,0,0,0.8); color: #ff9800; padding: 4px 12px;
+            border-radius: 20px; font-size: 10px; font-family: monospace;
+            pointer-events: none;
+        }
+        .queue-status.has-queue { background: #ff9800; color: #000; }
     </style>
 </head>
 <body>
@@ -176,7 +184,6 @@
                 </select>
                 <div id="userInfoTop" class="user-badge"></div>
                 <button id="logoutBtnTop" class="btn-outline" style="background:#b91c1c; color:white;">Logout</button>
-                <!-- vmsSite Edit Button - Monetization Aware -->
                 <button id="vmsSiteEditBtn" onclick="vmsSite_open()" style="background:#0f2c2c; margin-left:8px;">⚙️ Rename Site</button>
             </div>
         </div>
@@ -187,7 +194,6 @@
             <div id="licenseStatusBadge" class="license-badge">DEMO MODE</div>
         </div>
 
-        <!-- MONETIZATION PROGRESS BAR UI -->
         <div id="monetizationProgressCard" style="background:white; border-radius:20px; padding:16px; margin-bottom:16px; border:1px solid #e2e8f0;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <span style="font-weight:600; font-size:0.8rem;">📊 Visitor Usage Limit</span>
@@ -263,7 +269,6 @@
     </div>
 </div>
 
-<!-- vmsSite Modal - Monetization Aware UI -->
 <div id="vmsSiteModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); align-items:center; justify-content:center; z-index:10001;">
     <div style="background:white; border-radius:28px; padding:28px; width:420px; max-width:90%;">
         <h3 style="margin-bottom:20px; color:#1f4e4a; display:flex; align-items:center; gap:8px;">
@@ -296,41 +301,221 @@
 </div>
 
 <script>
-// ================= KONFIGURASI APPS SCRIPT ANDA =================
+// ================= APPS SCRIPT URL =================
+// GANTI DENGAN URL DEPLOY APPS SCRIPT ANDA
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7DnRNIgQF3i58-Ffjr2HTA3-Njj1n5iLrcrIXJkjIy0EPgb2UDEZcnsR4OC1iQHfX/exec";
 
-// ================= FUNGSI GOOGLE SHEET =================
-async function vmsSendToSheet(data) {
+// ================= QUEUE SYSTEM - ANTI DATA LOSS =================
+let syncQueue = [];
+let isProcessingQueue = false;
+
+// Inisialisasi queue dari localStorage
+function initQueue() {
     try {
-        const formData = new URLSearchParams();
-        formData.append("action", data.action || "register");
-        formData.append("name", data.name || "");
-        formData.append("company", data.company || "");
-        formData.append("purpose", data.purpose || "");
-        formData.append("pic", data.pic || "");
-        formData.append("start", data.start || "");
-        formData.append("exp", data.exp || "");
-        formData.append("reg", data.reg || "");
-        formData.append("timestamp", new Date().toISOString());
+        const saved = localStorage.getItem("vms_sync_queue");
+        if (saved) {
+            syncQueue = JSON.parse(saved);
+            console.log(`📦 Queue loaded: ${syncQueue.length} items pending`);
+            updateQueueStatus();
+        }
+    } catch(e) { console.warn("Queue init error:", e); }
+}
+
+// Simpan queue ke localStorage
+function persistQueue() {
+    try {
+        localStorage.setItem("vms_sync_queue", JSON.stringify(syncQueue));
+        updateQueueStatus();
+    } catch(e) { console.warn("Queue persist error:", e); }
+}
+
+// Update UI status queue
+function updateQueueStatus() {
+    let statusDiv = document.getElementById("queueStatusIndicator");
+    if (!statusDiv) {
+        statusDiv = document.createElement("div");
+        statusDiv.id = "queueStatusIndicator";
+        statusDiv.className = "queue-status";
+        document.body.appendChild(statusDiv);
+    }
+    
+    const count = syncQueue.length;
+    if (count > 0) {
+        statusDiv.innerHTML = `📦 Pending Sync: ${count} data`;
+        statusDiv.classList.add("has-queue");
+    } else {
+        statusDiv.innerHTML = `✅ Sync Active`;
+        statusDiv.classList.remove("has-queue");
+    }
+}
+
+// Generate unique request ID untuk idempotency
+function generateReqId() {
+    return `req_${Date.now()}_${Math.random().toString(36).substring(2, 10)}_${performance.now()}`;
+}
+
+// Cleanup old processed keys (max 500)
+function cleanupOldProcessedKeys() {
+    try {
+        const keys = [];
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith("vms_processed_")) {
+                keys.push({key, time: parseInt(localStorage.getItem(key)) || 0});
+            }
+        }
+        
+        if (keys.length > 500) {
+            keys.sort((a,b) => a.time - b.time);
+            const toDelete = keys.slice(0, keys.length - 450);
+            toDelete.forEach(item => localStorage.removeItem(item.key));
+        }
+    } catch(e) {}
+}
+
+// ================= VMS SEND TO SHEET DENGAN QUEUE + RETRY + IDEMPOTENCY =================
+async function vmsSendToSheet(action, data) {
+    // Generate request ID untuk idempotency
+    const reqId = generateReqId();
+    
+    const params = new URLSearchParams();
+    params.append("action", action);
+    params.append("reg", data.reg || "");
+    params.append("reqId", reqId);
+    
+    if (action === "register" || action === "walkin") {
+        params.append("name", data.name || "");
+        params.append("company", data.company || "");
+        params.append("purpose", data.purpose || "");
+        params.append("pic", data.pic || "");
+        params.append("start", data.start || "");
+        params.append("exp", data.exp || "");
+    }
+    
+    // Cek apakah sudah pernah diproses (idempotency check)
+    const processed = localStorage.getItem(`vms_processed_${reqId}`);
+    if (processed) {
+        console.log(`🔄 Request ${reqId} already processed, skipping`);
+        return true;
+    }
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         
         const response = await fetch(APPS_SCRIPT_URL, {
             method: "POST",
-            mode: "no-cors",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: formData.toString()
+            body: params.toString(),
+            signal: controller.signal
         });
         
-        console.log("[Google Sheet] Data terkirim:", data);
-        if (typeof toast === 'function') toast("✅ Data terkirim ke Google Sheet", "success");
-        return true;
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const result = await response.json();
+        
+        if (result && result.status === "success") {
+            // Tandai sebagai sudah diproses
+            localStorage.setItem(`vms_processed_${reqId}`, Date.now().toString());
+            cleanupOldProcessedKeys();
+            
+            console.log(`✅ [${action}] Success:`, result);
+            if (typeof toast === 'function') toast(`✅ ${result.message || "Sync OK"}`, "success");
+            return true;
+        } else {
+            throw new Error(result?.message || "Unknown error");
+        }
+        
     } catch (error) {
-        console.error("[Google Sheet] Error:", error);
-        if (typeof toast === 'function') toast("⚠️ Gagal kirim ke Google Sheet", "warning");
+        console.error(`❌ [${action}] Failed:`, error);
+        
+        // Simpan ke queue untuk retry
+        const queueItem = {
+            id: reqId,
+            action: action,
+            data: data,
+            retryCount: 0,
+            timestamp: Date.now()
+        };
+        
+        syncQueue.push(queueItem);
+        persistQueue();
+        
+        if (typeof toast === 'function') toast(`⚠️ Data saved to queue (auto retry)`, "warning");
         return false;
     }
 }
 
-// ================= BYPASS LOGIN - TAPI TETAP JAGA FITUR =================
+// ================= PROCESS QUEUE ENGINE =================
+async function processQueue() {
+    if (isProcessingQueue) return;
+    if (syncQueue.length === 0) return;
+    
+    isProcessingQueue = true;
+    console.log(`📦 PROCESSING QUEUE: ${syncQueue.length} items`);
+    
+    let newQueue = [];
+    
+    for (const item of syncQueue) {
+        try {
+            const ok = await vmsSendToSheet(item.action, item.data);
+            
+            if (!ok) {
+                item.retryCount++;
+                if (item.retryCount < 5) {
+                    newQueue.push(item);
+                    console.log(`⏳ Retry ${item.retryCount}/5 for ${item.id}`);
+                } else {
+                    console.error(`❌ DROPPED DATA after 5 retries:`, item);
+                    if (typeof toast === 'function') toast(`⚠️ Failed to sync after 5 attempts`, "error");
+                }
+            } else {
+                console.log(`✅ Queue item ${item.id} resolved`);
+            }
+        } catch (error) {
+            item.retryCount++;
+            if (item.retryCount < 5) {
+                newQueue.push(item);
+            } else {
+                console.error(`❌ DROPPED DATA after 5 retries:`, item);
+            }
+        }
+        
+        // Small delay between queue processing
+        await new Promise(r => setTimeout(r, 500));
+    }
+    
+    syncQueue = newQueue;
+    persistQueue();
+    isProcessingQueue = false;
+    
+    console.log(`📦 Queue remaining: ${syncQueue.length}`);
+}
+
+// ================= AUTO SYNC INTERVAL =================
+setInterval(() => {
+    if (syncQueue.length > 0 && navigator.onLine) {
+        processQueue();
+    }
+}, 5000);
+
+// Online event handler
+window.addEventListener("online", () => {
+    console.log("🟢 Online detected, processing queue...");
+    if (syncQueue.length > 0) {
+        processQueue();
+    }
+    if (typeof toast === 'function') toast("🟢 Back online - Syncing data...", "success");
+});
+
+// Initialize queue on load
+initQueue();
+
+// ================= BYPASS LOGIN =================
 (function forceBypassLogin() {
     const loginOverlay = document.getElementById("loginOverlay");
     if (loginOverlay) {
@@ -352,10 +537,10 @@ async function vmsSendToSheet(data) {
         el.classList.remove("admin-hide");
     });
     
-    console.log("[BYPASS] Login bypassed - UI aktif langsung");
+    console.log("[BYPASS] Login bypassed");
 })();
 
-// ================= EXPORT EXCEL DENGAN FORMAT YANG DIMINTA =================
+// ================= EXPORT EXCEL =================
 function exportToExcelWithFormat() {
     try {
         if (!window.XLSX) {
@@ -370,13 +555,11 @@ function exportToExcelWithFormat() {
             if (!siteKey.startsWith(currentSite + "_")) return;
             const reg = siteKey.replace(currentSite + "_", "");
             
-            // Ambil data check-in dan check-out dari sessions
             let jamMasuk = "-";
             let jamKeluar = "-";
             let keterangan = "";
             
             if (visitor.sessions && visitor.sessions.length > 0) {
-                // Ambil session terakhir
                 const lastSession = visitor.sessions[visitor.sessions.length - 1];
                 if (lastSession.checkIn) {
                     const checkInDate = new Date(lastSession.checkIn);
@@ -393,7 +576,6 @@ function exportToExcelWithFormat() {
                     });
                 }
                 
-                // Tentukan keterangan
                 if (visitor.currentStatus === "IN") {
                     keterangan = "Sedang berada di dalam area";
                 } else if (lastSession.checkIn && lastSession.checkOut) {
@@ -408,7 +590,6 @@ function exportToExcelWithFormat() {
                 keterangan = "Belum pernah melakukan check-in";
             }
             
-            // Cek expired
             if (visitor.expDate) {
                 const expDate = new Date(visitor.expDate);
                 expDate.setHours(23, 59, 59, 999);
@@ -439,30 +620,22 @@ function exportToExcelWithFormat() {
             return;
         }
         
-        // Urutkan berdasarkan nama
         dataForExcel.sort((a, b) => (a["Nama"] || "").localeCompare(b["Nama"] || ""));
         
         const ws = XLSX.utils.json_to_sheet(dataForExcel);
-        
-        // Set lebar kolom
-        ws['!cols'] = [
-            {wch:25}, {wch:20}, {wch:20}, {wch:15},
-            {wch:15}, {wch:15}, {wch:22}, {wch:22},
-            {wch:18}, {wch:40}
-        ];
+        ws['!cols'] = [{wch:25}, {wch:20}, {wch:20}, {wch:15}, {wch:15}, {wch:15}, {wch:22}, {wch:22}, {wch:18}, {wch:40}];
         
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "VMS_Visitor_Report");
         XLSX.writeFile(wb, `VMS_Report_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
         
-        if (typeof toast === 'function') toast("✅ Export Excel berhasil dengan format lengkap", "success");
+        if (typeof toast === 'function') toast("✅ Export Excel berhasil", "success");
     } catch(err) { 
         console.error("Export error:", err); 
         if (typeof toast === 'function') toast("Export gagal: " + err.message, "error");
     }
 }
 
-// ================= OVERRIDE TOMBOL EXPORT =================
 document.addEventListener('DOMContentLoaded', function() {
     const exportBtn = document.getElementById('exportExcelAction');
     if (exportBtn) {
@@ -472,32 +645,21 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <script>
-// ================= vmsSite SYSTEM - PURE ADDITIVE, TIDAK DIHAPUS =================
-
+// ================= vmsSite SYSTEM =================
 if (typeof window.vmsSiteData === 'undefined') {
     window.vmsSiteData = {
-        names: {
-            SITE_A: "SITE A",
-            SITE_B: "SITE B",
-            SITE_C: "SITE C"
-        },
+        names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" },
         customSites: {}
     };
 }
 
-function vmsSite_getCurrentPackage() {
-    return "PRO";
-}
-
+function vmsSite_getCurrentPackage() { return "PRO"; }
 function vmsSite_setPackage(pkg) {
     const badge = document.getElementById("vmsPackageBadge");
     if (badge) badge.innerText = pkg || "PRO";
     vmsSite_updateModalRestrictions();
 }
-
-function vmsSite_reloadSafe() {
-    setTimeout(function() { vmsSite_load(); }, 200);
-}
+function vmsSite_reloadSafe() { setTimeout(function() { vmsSite_load(); }, 200); }
 
 async function vmsSite_load() {
     try {
@@ -575,16 +737,6 @@ function vmsSite_renderDynamicSites() {
     container.innerHTML = '<div style="margin-top:16px; padding:12px; background:#f8fafc; border-radius:16px; text-align:center; font-size:0.7rem; color:#5f7f7c;">✨ Klik "+ Add Site" untuk menambah site baru</div>';
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/[&<>]/g, function(m) {
-        if (m === '&') return '&amp;';
-        if (m === '<') return '&lt;';
-        if (m === '>') return '&gt;';
-        return m;
-    });
-}
-
 function vmsSite_open() {
     const modal = document.getElementById("vmsSiteModal");
     if (!modal) return;
@@ -607,34 +759,22 @@ async function vmsSite_submit() {
     if (inputC) window.vmsSiteData.names.SITE_C = inputC.value.trim() || "SITE C";
     
     vmsSite_applyToUI();
-    const saved = await vmsSite_save();
+    await vmsSite_save();
     
     if (typeof toast === 'function') {
         toast("✅ Site names saved successfully!", "success");
-    } else {
-        alert("✅ Site names saved successfully!");
     }
     vmsSite_close();
 }
 
 function vmsSite_add() {
-    const newKey = prompt("Nama site baru (contoh: SITE_D, WAREHOUSE, OFFICE):", "SITE_D");
+    const newKey = prompt("Nama site baru:", "SITE_D");
     if (!newKey) return;
-    
     let cleanKey = newKey.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_");
-    if (cleanKey.length > 20) {
-        alert("Nama site terlalu panjang (maksimal 20 karakter)");
-        return;
-    }
-    
-    if (window.vmsSiteData.names[cleanKey] || window.vmsSiteData.customSites[cleanKey]) {
-        alert("Site sudah ada!");
-        return;
-    }
-    
-    let newName = prompt("Display name untuk site ini:", cleanKey.replace(/_/g, " "));
+    if (cleanKey.length > 20) { alert("Terlalu panjang"); return; }
+    if (window.vmsSiteData.names[cleanKey] || window.vmsSiteData.customSites[cleanKey]) { alert("Sudah ada"); return; }
+    let newName = prompt("Display name:", cleanKey.replace(/_/g, " "));
     if (!newName) return;
-    
     window.vmsSiteData.customSites[cleanKey] = newName;
     vmsSite_renderDynamicSites();
     vmsSite_applyToUI();
@@ -648,9 +788,7 @@ function vmsSite_removeCustomSite(key) {
     vmsSite_save();
 }
 
-function vmsSite_upgradePrompt() {
-    alert("Hubungi admin untuk upgrade license");
-}
+function vmsSite_upgradePrompt() { alert("Hubungi admin untuk upgrade license"); }
 
 function vmsSite_init() {
     try {
@@ -667,12 +805,11 @@ if (document.readyState === "loading") {
 </script>
 
 <script>
-// ================= DEVICE ID =================
+// ================= SISTEM UTAMA VMS =================
 if(!localStorage.getItem("vms_device_id")){
     localStorage.setItem("vms_device_id", "dev_"+Date.now()+"_"+Math.random().toString(36).slice(2));
 }
 
-// ================= SISTEMA ORIGINAL =================
 let LICENSE_MODE = localStorage.getItem("vms_license") || "PRO";
 let currentUser = { username: "admin", role: "SUPER_ADMIN" };
 let SITE_ID = localStorage.getItem("vms_site") || "SITE_A";
@@ -688,14 +825,6 @@ async function applyLicenseKey(key) {
     localStorage.setItem("vms_license", "PRO");
     if(typeof toast==='function') toast("✅ License aktif: PRO", "success");
     if(typeof updateMonetizationUI==='function') updateMonetizationUI();
-}
-
-function getUsers(){ return JSON.parse(localStorage.getItem("vms_users") || "[]"); }
-
-async function hashPassword(pw){
-    const enc = new TextEncoder().encode(pw);
-    const buf = await crypto.subtle.digest("SHA-256", enc);
-    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
 function login(username, password){ return true; }
@@ -724,9 +853,6 @@ function applyLicenseUI(){
     document.getElementById("licenseStatusBadge").innerText = "PRO MODE";
 }
 
-// ============================================================
-// SECURE STORAGE
-// ============================================================
 let visitors = {};
 let logs = [];
 
@@ -747,9 +873,6 @@ async function secureLoad(){
 
 window.saveStore = secureSave;
 
-// ============================================================
-// SISA SISTEM - DIAMBIL DARI FILE ASLI
-// ============================================================
 (async function(){
     const QR_SECRET = "VmsEnt2026!";
     let processingRegs = new Set();
@@ -972,15 +1095,15 @@ window.saveStore = secureSave;
         visitors[siteKey] = data;
         addLog(reg, "REGISTER");
         
-        await vmsSendToSheet({
-            action: "register",
+        // KIRIM KE GOOGLE SHEET (REGISTER) - DENGAN QUEUE
+        await vmsSendToSheet("register", {
+            reg: reg,
             name: nama,
             company: perusahaan,
             purpose: tujuan,
             pic: pic,
             start: startDate,
-            exp: expDate,
-            reg: reg
+            exp: expDate
         });
         
         toast(`✅ ${nama} terdaftar (${reg})`,"success");
@@ -1023,15 +1146,15 @@ window.saveStore = secureSave;
         visitors[siteKey] = walkData;
         addLog(reg, "WALK-IN");
         
-        await vmsSendToSheet({
-            action: "walkin",
+        // KIRIM KE GOOGLE SHEET (WALKIN) - DENGAN QUEUE
+        await vmsSendToSheet("walkin", {
+            reg: reg,
             name: walkData.nama,
             company: walkData.perusahaan,
             purpose: walkData.tujuan,
             pic: walkData.pic,
             start: walkData.startDate,
-            exp: walkData.expDate,
-            reg: reg
+            exp: walkData.expDate
         });
         
         toast(`Walk-in registered ${reg}`,"success");
@@ -1143,16 +1266,8 @@ window.saveStore = secureSave;
                 visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now(), version: (visitor.version || 0) + 1, deviceId: deviceId, site: SITE_ID };
                 addLog(reg, "CHECK_IN");
                 
-                await vmsSendToSheet({
-                    action: "checkin",
-                    name: visitor.nama,
-                    company: visitor.perusahaan,
-                    purpose: visitor.tujuan,
-                    pic: visitor.pic,
-                    start: visitor.startDate,
-                    exp: visitor.expDate,
-                    reg: reg
-                });
+                // KIRIM CHECK-IN KE GOOGLE SHEET - DENGAN QUEUE
+                await vmsSendToSheet("checkin", { reg: reg });
                 
                 toast(`✅ CHECK-IN ${visitor.nama} berhasil`,"success");
             } else {
@@ -1164,16 +1279,8 @@ window.saveStore = secureSave;
                 visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now(), version: (visitor.version || 0) + 1, deviceId: deviceId, site: SITE_ID };
                 addLog(reg, "CHECK_OUT");
                 
-                await vmsSendToSheet({
-                    action: "checkout",
-                    name: visitor.nama,
-                    company: visitor.perusahaan,
-                    purpose: visitor.tujuan,
-                    pic: visitor.pic,
-                    start: visitor.startDate,
-                    exp: visitor.expDate,
-                    reg: reg
-                });
+                // KIRIM CHECK-OUT KE GOOGLE SHEET - DENGAN QUEUE
+                await vmsSendToSheet("checkout", { reg: reg });
                 
                 toast(`✅ CHECK-OUT ${visitor.nama} berhasil`,"success");
             }
@@ -1201,6 +1308,8 @@ window.saveStore = secureSave;
                 visitor.sessions.push({ checkIn: Date.now(), checkOut: null });
                 visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now(), version: (visitor.version || 0) + 1, deviceId: deviceId, site: SITE_ID };
                 addLog(reg, "CHECK_IN");
+                
+                await vmsSendToSheet("checkin", { reg: reg });
                 toast(`Check-in ${visitor.nama} success`,"success");
             } else {
                 if(!visitor.sessions) visitor.sessions = [];
@@ -1210,6 +1319,8 @@ window.saveStore = secureSave;
                 else { openSession.checkOut = Date.now(); }
                 visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now(), version: (visitor.version || 0) + 1, deviceId: deviceId, site: SITE_ID };
                 addLog(reg, "CHECK_OUT");
+                
+                await vmsSendToSheet("checkout", { reg: reg });
                 toast(`Check-out ${visitor.nama} success`,"success");
             }
             if(typeof renderDashboard === 'function') renderDashboard(); 
@@ -1363,10 +1474,11 @@ window.saveStore = secureSave;
     window.canScan = function(){ return true; };
     window.vmsSendToSheet = vmsSendToSheet;
     window.exportToExcelWithFormat = exportToExcelWithFormat;
+    window.processQueue = processQueue;
 
     window.addEventListener("beforeunload", () => secureSave());
     
-    toast("🔥 VMS ACTIVE - QR Unlimited | Multi-Site Safe | Google Sheet Connected","success");
+    toast("🔥 VMS ACTIVE - Resilient Data Pipeline Ready (Queue + Retry + Idempotency)","success");
 })();
 </script>
 </body>
