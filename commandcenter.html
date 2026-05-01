@@ -631,355 +631,318 @@
 <div id="changePasswordModal" class="modal-overlay" style="display:none;"><div class="modal-box"><h3>🔐 Ganti Password</h3><input type="password" id="oldPassword" placeholder="Password Lama" class="input"/><input type="password" id="newPassword" placeholder="Password Baru" class="input"/><input type="password" id="confirmPassword" placeholder="Konfirmasi" class="input"/><div class="modal-actions"><button class="btn btn-secondary" onclick="closeChangePasswordModal()">Batal</button><button class="btn btn-warning" onclick="submitChangePassword()">Simpan</button></div></div></div>
 <div class="toast-container" id="toastContainer"></div>
 
-<script>
-    // ==================== ENTERPRISE-GRADE GLOBAL VARIABLES ====================
-    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7DnRNIgQF3i58-Ffjr2HTA3-Njj1n5iLrcrIXJkjIy0EPgb2UDEZcnsR4OC1iQHfX/exec";
-    let currentUser = null;
-    let syncLock = false;
-    let lastSyncHash = "";
-    let devicesData = [];
-    let packageChart = null;
-    let violationChart = null;
-    let refreshInterval = null;
-    let retryCount = 0;
-    const MAX_RETRY = 3;
-    const SESSION_TIMEOUT_MS = 3600000; // 1 hour
+        <script>
+        // ==================== CONFIG & STATE ====================
+        const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7DnRNIgQF3i58-Ffjr2HTA3-Njj1n5iLrcrIXJkjIy0EPgb2UDEZcnsR4OC1iQHfX/exec";
+        let currentUser = null;
+        let syncLock = false;
+        let lastSyncHash = "";
+        let devicesData = [];
+        let packageChart = null;
+        let refreshInterval = null;
+        const SESSION_TIMEOUT_MS = 3600000; // 1 Jam
 
-    // ==================== HELPERS ====================
-    function showToast(message, type = "info") {
-        const container = document.getElementById("toastContainer");
-        if (!container) return;
-        const toast = document.createElement("div");
-        toast.className = "toast";
-        const colors = { success: "#10b981", error: "#ef4444", warning: "#f59e0b", info: "#3b82f6" };
-        toast.style.borderLeftColor = colors[type] || colors.info;
-        toast.innerHTML = message;
-        container.appendChild(toast);
-        setTimeout(() => toast.remove(), 3000);
-    }
+        // ==================== UI HELPERS ====================
+        function showToast(message, type = "info") {
+            const container = document.getElementById("toastContainer");
+            if (!container) return;
+            const toast = document.createElement("div");
+            toast.className = "toast";
+            const colors = { success: "#10b981", error: "#ef4444", warning: "#f59e0b", info: "#3b82f6" };
+            toast.style.borderLeftColor = colors[type] || colors.info;
+            toast.innerHTML = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
 
-    function formatDate(timestamp) { if (!timestamp) return '-'; return new Date(timestamp).toLocaleDateString('id-ID'); }
-    function formatDateTime(timestamp) { if (!timestamp) return '-'; return new Date(timestamp).toLocaleString('id-ID'); }
-    function escapeHtml(str) { if (!str) return ''; return String(str).replace(/[&<>]/g, function(m) { if (m === '&') return '&amp;'; if (m === '<') return '&lt;'; if (m === '>') return '&gt;'; return m; }); }
-    function formatCurrency(amount) { return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(amount); }
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+        }
 
-    // ==================== SESSION MANAGEMENT ====================
-    function isSessionValid() {
-        const sessionTime = localStorage.getItem("vms_session");
-        if (!sessionTime) return false;
-        const diff = Date.now() - parseInt(sessionTime);
-        return diff < SESSION_TIMEOUT_MS;
-    }
+        // ==================== AUTH SYSTEM ====================
+        function isSessionValid() {
+            const sessionTime = localStorage.getItem("vms_session");
+            if(!sessionTime) return false;
+            const now = Date.now();
+            return (now - parseInt(sessionTime)) < SESSION_TIMEOUT_MS;
+        }
 
-    function extendSession() {
-        if (currentUser) {
+        function extendSession() {
             localStorage.setItem("vms_session", Date.now().toString());
         }
-    }
 
-    // ==================== HARDENED LOGIN (POST METHOD) ====================
-    window.doLogin = async function() {
-        const username = document.getElementById("loginUser").value.trim();
-        const password = document.getElementById("loginPass").value;
-        if (!username || !password) { showToast("Username & password wajib", "error"); return; }
-        
-        showToast("Login...", "info");
-        
-        try {
-            const params = new URLSearchParams();
-            params.append("action", "login");
-            params.append("u", username);
-            params.append("p", password);
-            
-            const res = await fetch(APPS_SCRIPT_URL, {
-                method: "POST",
-                headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                body: params.toString()
+        window.logout = function() {
+            console.log("Logging out...");
+            if (refreshInterval) clearInterval(refreshInterval);
+            localStorage.clear();
+            sessionStorage.clear();
+            currentUser = null;
+            location.reload(); // Refresh total biar bersih
+        };
+
+        window.doLogin = async function() {
+            const u = document.getElementById("loginUser")?.value.trim();
+            const p = document.getElementById("loginPass")?.value.trim();
+
+            if (!u || !p) {
+                alert("Username & Password harus diisi!");
+                return;
+            }
+
+            try {
+                console.log("Mencoba login untuk:", u);
+                const params = new URLSearchParams({ action: "login", u, p });
+                const res = await fetch(APPS_SCRIPT_URL, { 
+                    method: "POST", 
+                    body: params.toString(),
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                });
+
+                const text = await res.text(); // Ambil teks mentah dulu
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch(e) {
+                    console.error("Respon server bukan JSON:", text);
+                    alert("Gagal login: Respon server tidak valid.");
+                    return;
+                }
+
+                if (data.status === "success") {
+                    console.log("Login Berhasil!");
+                    localStorage.setItem("vms_admin_user", u);
+                    extendSession();
+                    
+                    currentUser = { username: u };
+                    document.getElementById("loginOverlay").style.display = "none";
+                    document.getElementById("topUsername").innerText = u;
+                    document.getElementById("sidebarUsername").innerText = u;
+                    
+                    showToast("Selamat Datang, " + u, "success");
+                    await loadAllData();
+                    refreshInterval = setInterval(loadAllData, 30000);
+                } else {
+                    alert(data.message || "Login Gagal! Cek username/password.");
+                }
+            } catch (err) {
+                console.error("Error Koneksi:", err);
+                alert("Koneksi ke server gagal. Cek internet lo.");
+            }
+        };
+
+        // ==================== DATA ENGINE ====================
+        async function loadAllData() {
+            if (syncLock) return;
+            syncLock = true;
+            try {
+                const res = await fetch(`${APPS_SCRIPT_URL}?action=pull&t=${Date.now()}`);
+                const data = await res.json();
+                
+                if (data.status !== "success") throw new Error("Server error");
+                
+                const raw = JSON.stringify(data.data);
+                if (raw === lastSyncHash) { syncLock = false; return; }
+                lastSyncHash = raw;
+                
+                const rows = data.data.slice(1);
+                devicesData = rows.map(r => ({
+                    name: r[0] || "", company: r[1] || "", purpose: r[2] || "", pic: r[3] || "", 
+                    start: r[4] || "", exp: r[5] || "", checkin: r[6] || "", checkout: r[7] || "", 
+                    status: r[11] || "", alert: r[13] || ""
+                }));
+                
+                updateDashboard();
+                renderDevicesTable();
+                renderCompaniesTable();
+                renderRecentViolations();
+                updateCharts();
+                extendSession(); // Update session tiap kali data ditarik
+            } catch (e) {
+                console.error("Gagal tarik data:", e);
+            } finally {
+                syncLock = false;
+            }
+        }
+
+        // --- Render Functions ---
+        function updateDashboard() {
+            document.getElementById("statTotalDevices").innerText = devicesData.length;
+            document.getElementById("statActiveDevices").innerText = devicesData.filter(d => d.status === "IN").length;
+            document.getElementById("statPendingDevices").innerText = devicesData.filter(d => d.status === "OUT").length;
+            document.getElementById("statTotalViolations").innerText = devicesData.filter(d => d.alert && d.alert.includes("⚠️")).length;
+        }
+
+        function renderDevicesTable() {
+            const tbody = document.querySelector("#devicesTable tbody");
+            if (!tbody) return;
+            const search = document.getElementById("deviceSearch")?.value.toLowerCase() || "";
+            const filtered = devicesData.filter(d => d.name.toLowerCase().includes(search) || d.company.toLowerCase().includes(search));
+            tbody.innerHTML = filtered.map(d => `
+                <tr>
+                    <td><strong>${escapeHtml(d.name)}</strong></td>
+                    <td>${escapeHtml(d.company)}</td>
+                    <td>${escapeHtml(d.pic)}</td>
+                    <td>${escapeHtml(d.checkin)}</td>
+                    <td class="${d.alert.includes('⚠️') ? 'text-danger' : ''}">${escapeHtml(d.checkout)}</td>
+                    <td><span class="badge ${d.status === 'IN' ? 'badge-active' : 'badge-pending'}">${escapeHtml(d.status)}</span></td>
+                    <td class="text-danger">${escapeHtml(d.alert || '-')}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderCompaniesTable() {
+            const tbody = document.querySelector("#companiesTable tbody");
+            if (!tbody) return;
+            const search = document.getElementById("companySearch")?.value.toLowerCase() || "";
+            const unique = devicesData.filter((v, i, a) => a.findIndex(t => (t.company === v.company)) === i);
+            const filtered = unique.filter(d => d.company.toLowerCase().includes(search));
+            tbody.innerHTML = filtered.map(d => `
+                <tr>
+                    <td><strong>${escapeHtml(d.company)}</strong></td>
+                    <td>${escapeHtml(d.name)}</td>
+                    <td>${escapeHtml(d.pic)}</td>
+                    <td>${escapeHtml(d.exp)}</td>
+                    <td><span class="badge badge-active">Verified</span></td>
+                </tr>
+            `).join('');
+        }
+
+        function renderRecentViolations() {
+            const tbody = document.querySelector("#recentViolationsTable tbody");
+            if (!tbody) return;
+            const violations = devicesData.filter(d => d.alert && d.alert.includes("⚠️")).slice(0, 10);
+            tbody.innerHTML = violations.map(d => `
+                <tr>
+                    <td>${escapeHtml(d.company)}</td>
+                    <td>${escapeHtml(d.name)}</td>
+                    <td><span class="badge badge-danger">VIOLATION</span></td>
+                    <td>${escapeHtml(d.checkout)}</td>
+                    <td><span class="badge badge-warning">Active</span></td>
+                </tr>
+            `).join('');
+        }
+
+        function updateCharts() {
+            const inCount = devicesData.filter(d => d.status === "IN").length;
+            const outCount = devicesData.filter(d => d.status === "OUT").length;
+            const ctx = document.getElementById("packageChart");
+            if (!ctx) return;
+            if (packageChart) packageChart.destroy();
+            packageChart = new Chart(ctx.getContext("2d"), {
+                type: 'doughnut',
+                data: {
+                    labels: ['IN', 'OUT'],
+                    datasets: [{ data: [inCount, outCount], backgroundColor: ['#10b981', '#f59e0b'], borderWidth: 0 }]
+                },
+                options: { responsive: true, plugins: { legend: { labels: { color: '#f9fafb' } } } }
             });
-            
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const text = await res.text();
-            let data;
-            try { data = JSON.parse(text); } catch(e) { throw new Error("Invalid JSON response"); }
-            
-            if (data.status === "success") {
-                currentUser = { username: data.user || username };
-                localStorage.setItem("vms_admin_user", username);
-                localStorage.setItem("vms_session", Date.now().toString());
-                document.getElementById("loginOverlay").classList.add("hidden");
-                document.getElementById("topUsername").innerText = username;
-                document.getElementById("sidebarUsername").innerText = username;
-                showToast("Login sukses", "success");
-                retryCount = 0;
-                await loadAllData();
-                startAutoRefresh();
-            } else { 
-                showToast(data.message || "Login gagal", "error");
-            }
-        } catch(e) { 
-            console.error("LOGIN ERROR:", e); 
-            showToast("Gagal koneksi ke server", "error"); 
         }
-    };
 
-    function logout() { 
-        currentUser = null; 
-        if(refreshInterval) clearInterval(refreshInterval); 
-        localStorage.clear(); 
-        document.getElementById("loginOverlay").classList.remove("hidden"); 
-        showToast("Logged out", "info"); 
-    }
-    
-    function startAutoRefresh() { 
-        if(refreshInterval) clearInterval(refreshInterval); 
-        refreshInterval = setInterval(() => { 
-            if(!syncLock && currentUser) {
+        function switchTab(tabId) { 
+            document.querySelectorAll(".tab-pane").forEach(p => p.classList.remove("active")); 
+            document.getElementById(`${tabId}Tab`)?.classList.add("active"); 
+            document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active")); 
+            const nav = document.querySelector(`.nav-item[data-tab="${tabId}"]`);
+            if(nav) nav.classList.add("active");
+            document.getElementById("pageTitle").innerText = tabId.toUpperCase();
+        }
+
+        // ==================== LISTENERS & INIT ====================
+        document.addEventListener("DOMContentLoaded", () => {
+            // Nav Tab Listeners
+            document.querySelectorAll(".nav-item").forEach(nav => {
+                nav.addEventListener("click", () => {
+                    const tab = nav.dataset.tab;
+                    if (tab) switchTab(tab);
+                    if (window.innerWidth <= 768) document.getElementById("sidebar").classList.remove("open");
+                });
+            });
+
+            document.getElementById("mobileMenuBtn")?.addEventListener("click", () => {
+                document.getElementById("sidebar").classList.toggle("open");
+            });
+
+            // Logout Listeners
+            document.getElementById("topLogoutBtn")?.addEventListener("click", window.logout);
+            document.getElementById("sidebarLogoutBtn")?.addEventListener("click", window.logout);
+
+            // Search Listeners
+            document.getElementById("deviceSearch")?.addEventListener("input", renderDevicesTable);
+            document.getElementById("companySearch")?.addEventListener("input", renderCompaniesTable);
+
+            // Time Update
+            setInterval(() => { 
+                const el = document.getElementById("serverTime"); 
+                if (el) el.innerHTML = `Server Time: ${new Date().toLocaleString('id-ID')}`; 
+            }, 1000);
+
+            // Start App
+            init();
+        });
+
+        async function init() { 
+            const savedUser = localStorage.getItem("vms_admin_user"); 
+            if (savedUser && isSessionValid()) { 
+                console.log("Sesi valid, memuat data...");
+                currentUser = { username: savedUser }; 
                 extendSession();
-                loadAllData();
-            }
-        }, 5000); 
-    }
-
-    // ==================== HARDENED LOAD DATA WITH RETRY & ERROR HANDLING ====================
-    async function loadAllData() {
-        if(syncLock) return;
-        syncLock = true;
-        
-        try {
-            const res = await fetch(`${APPS_SCRIPT_URL}?action=pull&t=${Date.now()}`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            
-            const text = await res.text();
-            let json;
-            try { json = JSON.parse(text); } catch(e) { throw new Error("Invalid JSON from server"); }
-            
-            if(json.status !== "success") throw new Error(json.message || "Server error");
-            
-            const raw = JSON.stringify(json.data);
-            if(raw === lastSyncHash) { 
-                syncLock = false; 
-                return; 
-            }
-            lastSyncHash = raw;
-            retryCount = 0;
-            
-            const rows = json.data.slice(1);
-            devicesData = rows.map(r => ({
-                name: r[0] || "", company: r[1] || "", purpose: r[2] || "", pic: r[3] || "", 
-                start: r[4] || "", exp: r[5] || "", checkin: r[6] || "", checkout: r[7] || "", 
-                reg: r[8] || "", log: r[9] || "", timestamp: r[10] || "", 
-                status: r[11] || "", duration: r[12] || "", alert: r[13] || ""
-            }));
-            
-            updateDashboard();
-            updateTables();
-            updateCharts();
-            extendSession();
-            
-        } catch(e) {
-            console.error("LOAD ERROR:", e);
-            if(retryCount < MAX_RETRY) {
-                retryCount++;
-                showToast(`Sync gagal, retry ${retryCount}/${MAX_RETRY}...`, "warning");
-                setTimeout(() => { syncLock = false; loadAllData(); }, 2000);
-            } else {
-                showToast("Gagal sinkron data, cek koneksi", "error");
-                retryCount = 0;
-            }
-        } finally {
-            syncLock = false;
-        }
-    }
-
-    function updateDashboard() {
-        const total = devicesData.length;
-        const active = devicesData.filter(d => d.status === "IN").length;
-        const pending = devicesData.filter(d => d.status === "OUT").length;
-        const overstay = devicesData.filter(d => d.alert === "OVERSTAY ⚠️").length;
-        document.getElementById("statTotalDevices").innerText = total;
-        document.getElementById("statActiveDevices").innerText = active;
-        document.getElementById("statPendingDevices").innerText = pending;
-        document.getElementById("statTotalViolations").innerText = overstay;
-    }
-
-    // ==================== RENDER FUNCTIONS ====================
-    function renderDevicesTable() {
-        const tbody = document.querySelector("#devicesTable tbody");
-        if(!tbody) return;
-        const search = document.getElementById("deviceSearch")?.value.toLowerCase() || "";
-        const statusFilter = document.getElementById("deviceStatusFilter")?.value || "";
-        const filtered = devicesData.filter(d => (d.name.toLowerCase().includes(search) || d.company.toLowerCase().includes(search)) && (statusFilter === "" || d.status === statusFilter));
-        tbody.innerHTML = filtered.map(d => `<tr><td><strong>${escapeHtml(d.name)}</strong></td><td>${escapeHtml(d.company)}</td><td>${escapeHtml(d.pic)}</td><td>${escapeHtml(d.checkin)}</td><td class="${d.alert === 'OVERSTAY ⚠️' ? 'text-danger' : ''}">${escapeHtml(d.checkout)}</td><td><span class="badge ${d.status === 'IN' ? 'badge-active' : 'badge-pending'}">${escapeHtml(d.status)}</span></td><td class="${d.alert === 'OVERSTAY ⚠️' ? 'text-danger' : ''}">${escapeHtml(d.alert || '-')}</td></tr>`).join('');
-    }
-    
-    function renderCompaniesTable() {
-        const tbody = document.querySelector("#companiesTable tbody");
-        if(!tbody) return;
-        const search = document.getElementById("companySearch")?.value.toLowerCase() || "";
-        const filtered = devicesData.filter(d => d.company.toLowerCase().includes(search));
-        const unique = filtered.reduce((acc, curr) => { if(!acc.find(c => c.company === curr.company)) acc.push(curr); return acc; }, []);
-        tbody.innerHTML = unique.map(d => `<tr><td><strong>${escapeHtml(d.company)}</strong></td><td>${escapeHtml(d.name)}</td><td>${escapeHtml(d.purpose)}</td><td>${escapeHtml(d.pic)}</td><td>${escapeHtml(d.start)}</td><td>${escapeHtml(d.exp)}</td><td><span class="badge ${d.status === 'IN' ? 'badge-active' : 'badge-pending'}">${escapeHtml(d.status)}</span></td></tr>`).join('');
-    }
-    
-    function renderRecentViolations() {
-        const tbody = document.querySelector("#recentViolationsTable tbody");
-        if(!tbody) return;
-        const overstay = devicesData.filter(d => d.alert === "OVERSTAY ⚠️").slice(0,20);
-        tbody.innerHTML = overstay.map(d => `<tr><td><strong>${escapeHtml(d.company)}</strong></td><td>${escapeHtml(d.name)}</td><td><span class="badge badge-danger">OVERSTAY</span></td><td>${escapeHtml(d.checkout)}</td><td><span class="badge badge-warning">Violation</span></td></tr>`).join('');
-    }
-    
-    function renderExpiringTable() {
-        const tbody = document.querySelector("#expiringTable tbody");
-        if(!tbody) return;
-        const recentOut = devicesData.filter(d => d.status === "OUT").slice(0,15);
-        tbody.innerHTML = recentOut.map(d => `<tr><td><strong>${escapeHtml(d.company)}</strong></td><td>${escapeHtml(d.name)}</td><td>${escapeHtml(d.checkout)}</td><td><span class="badge badge-pending">OUT</span></td></tr>`).join('');
-    }
-    
-    function renderRecentLicenses() {
-        const tbody = document.getElementById("recentLicensesBody");
-        if(!tbody) return;
-        const unique = devicesData.slice(0,20);
-        tbody.innerHTML = unique.map(d => `<tr><td>${escapeHtml(d.company)}</td><td>${escapeHtml(d.name)}</td><td>${escapeHtml(d.checkin)}</td><td><span class="badge badge-active">${escapeHtml(d.status)}</span></td></tr>`).join('');
-    }
-    
-    function renderViolationsTable() {
-        const tbody = document.querySelector("#violationsTable tbody");
-        if(!tbody) return;
-        const search = document.getElementById("violationSearch")?.value.toLowerCase() || "";
-        const overstay = devicesData.filter(d => d.alert === "OVERSTAY ⚠️" && (d.company.toLowerCase().includes(search) || d.name.toLowerCase().includes(search)));
-        tbody.innerHTML = overstay.map(d => `<tr><td><strong>${escapeHtml(d.company)}</strong></td><td>${escapeHtml(d.name)}</td><td><span class="badge badge-danger">OVERSTAY</span></td><td>Checkout melebihi batas</td><td>${escapeHtml(d.checkout)}</td></tr>`).join('');
-    }
-    
-    function renderPendingRequests() {
-        const tbody = document.querySelector("#requestsTable tbody");
-        if(!tbody) return;
-        const pending = devicesData.filter(d => d.status === "OUT" && d.alert !== "OVERSTAY ⚠️");
-        document.getElementById("pendingCount").innerText = pending.length;
-        tbody.innerHTML = pending.map(d => `<tr><td><strong>${escapeHtml(d.company)}</strong></td><td>${escapeHtml(d.name)}</td><td>${escapeHtml(d.name)}</td><td>${escapeHtml(d.checkout)}</td><td><button class="btn btn-success btn-sm" onclick="approveDeviceRequest('${d.name.replace(/'/g, "\\'")}', true)">✅ Approve</button><button class="btn btn-danger btn-sm" onclick="approveDeviceRequest('${d.name.replace(/'/g, "\\'")}', false)">❌ Reject</button></td></tr>`).join('');
-    }
-    
-    function updateTables() {
-        renderDevicesTable(); 
-        renderCompaniesTable(); 
-        renderRecentViolations(); 
-        renderExpiringTable(); 
-        renderRecentLicenses(); 
-        renderViolationsTable(); 
-        renderPendingRequests();
-    }
-    
-    function updateCharts() {
-        const inCount = devicesData.filter(d => d.status === "IN").length;
-        const outCount = devicesData.filter(d => d.status === "OUT").length;
-        if(packageChart) packageChart.destroy();
-        if(violationChart) violationChart.destroy();
-        const pkgCtx = document.getElementById("packageChart").getContext("2d");
-        packageChart = new Chart(pkgCtx, { type: 'doughnut', data: { labels: ['IN', 'OUT'], datasets: [{ data: [inCount, outCount], backgroundColor: ['#10b981', '#f59e0b'], borderWidth: 0 }] }, options: { responsive: true, plugins: { legend: { labels: { color: '#f9fafb' } } } } });
-        const violCtx = document.getElementById("violationChart").getContext("2d");
-        violationChart = new Chart(violCtx, { type: 'line', data: { labels: ['Active', 'Overstay'], datasets: [{ label: 'Count', data: [inCount, devicesData.filter(d=>d.alert==="OVERSTAY ⚠️").length], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true }] }, options: { responsive: true, plugins: { legend: { labels: { color: '#f9fafb' } } }, scales: { y: { ticks: { color: '#9ca3af' } }, x: { ticks: { color: '#9ca3af' } } } } });
-    }
-
-    // ==================== HARDENED PDF EXPORT (FROM DATA, NOT DOM) ====================
-    async function exportCompaniesToPDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('landscape');
-        doc.text("VMS Companies Report", 14, 15);
-        const headers = [["Company", "Device Name", "Purpose", "PIC", "Start", "Exp", "Status"]];
-        const rows = devicesData.slice(0, 200).map(d => [d.company, d.name, d.purpose, d.pic, d.start, d.exp, d.status]);
-        doc.autoTable({ head: headers, body: rows, startY: 20, theme: 'striped', styles: { fontSize: 8 }, headStyles: { fillColor: [16, 185, 129] } });
-        doc.save(`vms_companies_${Date.now()}.pdf`);
-        showToast("PDF Exported from data", "success");
-    }
-    
-    async function exportDevicesToPDF() {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF('landscape');
-        doc.text("VMS Devices Report", 14, 15);
-        const headers = [["Device Name", "Company", "PIC", "Check-in", "Checkout", "Status", "Alert"]];
-        const rows = devicesData.map(d => [d.name, d.company, d.pic, d.checkin, d.checkout, d.status, d.alert || "-"]);
-        doc.autoTable({ head: headers, body: rows, startY: 20, theme: 'striped', styles: { fontSize: 8 }, headStyles: { fillColor: [16, 185, 129] } });
-        doc.save(`vms_devices_${Date.now()}.pdf`);
-        showToast("PDF Exported from data", "success");
-    }
-
-    function exportCompaniesToExcel() { 
-        const wsData = devicesData.map(d => ({ Company: d.company, Device: d.name, Purpose: d.purpose, PIC: d.pic, Start: d.start, Exp: d.exp, Status: d.status })); 
-        const ws = XLSX.utils.json_to_sheet(wsData); 
-        const wb = XLSX.utils.book_new(); 
-        XLSX.utils.book_append_sheet(wb, ws, "Companies"); 
-        XLSX.writeFile(wb, `vms_companies_${Date.now()}.xlsx`); 
-        showToast("Export Excel berhasil", "success"); 
-    }
-    
-    function exportDevicesToExcel() { 
-        const wsData = devicesData.map(d => ({ Device: d.name, Company: d.company, PIC: d.pic, Status: d.status, Checkin: d.checkin, Checkout: d.checkout, Alert: d.alert })); 
-        const ws = XLSX.utils.json_to_sheet(wsData); 
-        const wb = XLSX.utils.book_new(); 
-        XLSX.utils.book_append_sheet(wb, ws, "Devices"); 
-        XLSX.writeFile(wb, `vms_devices_${Date.now()}.xlsx`); 
-        showToast("Export Excel berhasil", "success"); 
-    }
-    
-    function exportInvoicesToExcel() { showToast("Export Invoice (data dari GSheet)", "info"); }
-    function loadDeviceRequests() { renderPendingRequests(); }
-    function clearViolationsConfirm() { showToast("Demo: Violations cleared", "success"); }
-    function addAdminUser() { showToast("Demo: Admin added", "success"); }
-    async function generateLicense() { showToast("Demo: License generated (GAS integration)", "success"); loadAllData(); }
-    async function approveDeviceRequest(deviceId, approve) { showToast(`Device ${approve ? 'approved' : 'rejected'}`, "success"); loadAllData(); }
-    function refreshData() { loadAllData(); showToast("Data refreshed", "success"); }
-    function closeModal(modalId) { const modal = document.getElementById(modalId); if(modal) modal.classList.remove("active"); }
-    function openChangePasswordModal() { document.getElementById("changePasswordModal").style.display = "flex"; }
-    function closeChangePasswordModal() { document.getElementById("changePasswordModal").style.display = "none"; }
-    async function submitChangePassword() { showToast("Password change - Use GAS endpoint", "warning"); closeChangePasswordModal(); }
-    function openRenewModal(id, name) { document.getElementById("renewCompanyName").value = name; document.getElementById("renewModal").classList.add("active"); }
-    function confirmRenew() { showToast("License renewed (demo)", "success"); closeModal("renewModal"); }
-    function openUpgradeModal(id, name, pkg) { document.getElementById("upgradeCompanyName").value = name; document.getElementById("upgradeCurrentPackage").value = pkg; document.getElementById("upgradeModal").classList.add("active"); }
-    function confirmUpgrade() { showToast("Package upgraded (demo)", "success"); closeModal("upgradeModal"); }
-    function viewCompanyDetails(companyName) { const details = devicesData.filter(d => d.company === companyName)[0] || devicesData[0]; document.getElementById("companyDetailContent").innerHTML = `<p><strong>Company:</strong> ${escapeHtml(details.company)}</p><p><strong>PIC:</strong> ${escapeHtml(details.pic)}</p><p><strong>Total Devices:</strong> ${devicesData.filter(d=>d.company===companyName).length}</p>`; document.getElementById("companyDetailModal").classList.add("active"); }
-    function viewDeviceDetails(deviceName) { const device = devicesData.find(d => d.name === deviceName) || devicesData[0]; document.getElementById("deviceDetailContent").innerHTML = `<p><strong>Device:</strong> ${escapeHtml(device.name)}</p><p><strong>Company:</strong> ${escapeHtml(device.company)}</p><p><strong>Check-in:</strong> ${device.checkin}</p><p><strong>Checkout:</strong> ${device.checkout}</p><p><strong>Status:</strong> ${device.status}</p>`; document.getElementById("deviceDetailModal").classList.add("active"); }
-    
-    function switchTab(tabId) { 
-        document.querySelectorAll(".tab-pane").forEach(pane => pane.classList.remove("active")); 
-        const target = document.getElementById(`${tabId}Tab`); 
-        if(target) target.classList.add("active"); 
-        document.querySelectorAll(".nav-item").forEach(nav => nav.classList.remove("active")); 
-        const activeNav = document.querySelector(`.nav-item[data-tab="${tabId}"]`); 
-        if(activeNav) activeNav.classList.add("active"); 
-        const titles = { dashboard:"Dashboard", companies:"Companies", devices:"Devices", violations:"Violations", requests:"Pending Approvals", license:"Generate License", invoices:"Invoices", settings:"Settings", devicerequests:"Device Requests" }; 
-        document.getElementById("pageTitle").innerText = titles[tabId] || "Dashboard"; 
-        if(tabId === "devices" || tabId==="companies" || tabId==="violations") loadAllData(); 
-    }
-
-    // ==================== EVENT LISTENERS & INIT ====================
-    document.querySelectorAll(".nav-item").forEach(nav => nav.addEventListener("click", () => { const tab = nav.dataset.tab; if(tab) switchTab(tab); if(window.innerWidth <= 768) document.getElementById("sidebar").classList.remove("open"); }));
-    document.getElementById("mobileMenuBtn")?.addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
-    document.getElementById("topLogoutBtn")?.addEventListener("click", logout);
-    document.getElementById("sidebarLogoutBtn")?.addEventListener("click", logout);
-    document.getElementById("companySearch")?.addEventListener("input", () => renderCompaniesTable());
-    document.getElementById("deviceSearch")?.addEventListener("input", () => renderDevicesTable());
-    document.getElementById("deviceStatusFilter")?.addEventListener("change", () => renderDevicesTable());
-    document.getElementById("violationSearch")?.addEventListener("input", () => renderViolationsTable());
-    setInterval(() => { const el = document.getElementById("serverTime"); if(el) el.innerHTML = `Server Time: ${new Date().toLocaleString()}`; }, 1000);
-
-    async function init() { 
-        const savedUser = localStorage.getItem("vms_admin_user"); 
-        if(savedUser && isSessionValid()) { 
-            currentUser = { username: savedUser }; 
-            extendSession();
-            document.getElementById("loginOverlay").classList.add("hidden"); 
-            document.getElementById("topUsername").innerText = savedUser; 
-            document.getElementById("sidebarUsername").innerText = savedUser; 
-            await loadAllData(); 
-            startAutoRefresh(); 
-        } else { 
-            if(savedUser && !isSessionValid()) {
+                document.getElementById("loginOverlay").style.display = "none"; 
+                document.getElementById("topUsername").innerText = savedUser; 
+                document.getElementById("sidebarUsername").innerText = savedUser; 
+                await loadAllData(); 
+                refreshInterval = setInterval(loadAllData, 30000);
+            } else { 
+                console.log("Sesi kosong atau kadaluarsa.");
                 localStorage.clear();
-                showToast("Session expired, silakan login ulang", "warning");
-            }
-            document.getElementById("loginOverlay").classList.remove("hidden"); 
-        } 
+                document.getElementById("loginOverlay").style.display = "flex"; 
+            } 
+        }
+    </script>
+<script>
+
+// ===== HARD FIX LOGOUT (ANTI ERROR TOTAL) =====
+
+window.logout = function () {
+    try {
+        console.log("🚪 LOGOUT EXECUTED");
+
+        // clear session
+        localStorage.clear();
+
+        // stop refresh
+        if (typeof refreshInterval !== "undefined" && refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+
+        // tampilkan login lagi
+        const overlay = document.getElementById("loginOverlay");
+        if (overlay) overlay.style.display = "flex";
+
+    } catch (e) {
+        console.error("LOGOUT ERROR:", e);
     }
-    init();
+};
+
+// ===== FORCE BIND BUTTON =====
+
+document.addEventListener("DOMContentLoaded", function () {
+
+    const btnTop = document.getElementById("topLogoutBtn");
+    const btnSide = document.getElementById("sidebarLogoutBtn");
+
+    if (btnTop) {
+        btnTop.onclick = window.logout;
+    }
+
+    if (btnSide) {
+        btnSide.onclick = window.logout;
+    }
+
+    console.log("✅ LOGOUT BIND READY");
+
+});
+
 </script>
 </body>
 </html>
