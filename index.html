@@ -157,31 +157,31 @@ async function vmsSendToSheet(action, data) {
         // 🔥 FIX UTAMA: HAPUS headers + AbortController
         const response = await fetch(APPS_SCRIPT_URL, {
     method: "POST",
-    body: params
+    body: params.toString()
 });
-
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        // 🔥 DEBUG RAW RESPONSE (biar gak silent error)
-        const text = await response.text();
-        console.log("📡 RAW RESPONSE TEXT:", text);
+        // 🔥 DEBUG RAW RESPONSE (safe parsing)
+let result;
 
-        let result;
-        try {
-            result = JSON.parse(text);
-        } catch (e) {
-            throw new Error("INVALID JSON: " + text);
-        }
+try {
+    const clone = response.clone();        // ⬅️ penting
+    result = await response.json();
+} catch (e) {
+    try {
+        const text = await clone.text();   // baca dari clone
+        console.error("❌ RAW FALLBACK:", text);
+    } catch (_) {
+        console.error("❌ RAW FALLBACK: <empty>");
+    }
+    throw new Error("INVALID JSON RESPONSE");
+};
 
-        if (result && result.status === "success") {
-            localStorage.setItem(`vms_processed_${reqId}`, Date.now().toString());
-            cleanupOldProcessedKeys();
-
-            // 🔥 OPTIONAL: bersihin queue kalau sukses
-            if (typeof syncQueue !== "undefined") {
-                syncQueue = syncQueue.filter(q => q.id !== reqId);
-                persistQueue();
-            }
+            // 🔥 CLEAN QUEUE SAAT SUKSES (FIX FINAL)
+if (typeof syncQueue !== "undefined") {
+    syncQueue = syncQueue.filter(q => !(q.data?.reg === data.reg && q.action === action));
+    persistQueue();
+}
 
             if (typeof toast === 'function') {
                 toast(`✅ ${result.message || "Sync OK"}`, "success");
@@ -214,7 +214,7 @@ async function vmsSendToSheet(action, data) {
     }
 }
 
-async function processQueue() {
+async function processQueue_DISABLED() {
     if (isProcessingQueue) return;
     if (syncQueue.length === 0) return;
     isProcessingQueue = true;
@@ -232,9 +232,18 @@ async function processQueue() {
     isProcessingQueue = false;
 }
 
-setInterval(() => { if (syncQueue.length > 0 && navigator.onLine) processQueue(); }, 5000);
-window.addEventListener("online", () => { if (syncQueue.length > 0) processQueue(); if (typeof toast === 'function') toast("🟢 Online - Syncing...", "success"); });
-initQueue();
+if (false) {
+  setInterval(() => { 
+    if (syncQueue.length > 0 && navigator.onLine) processQueue(); 
+  }, 5000);
+
+  window.addEventListener("online", () => { 
+    if (syncQueue.length > 0) processQueue(); 
+    if (typeof toast === 'function') toast("🟢 Online - Syncing...", "success"); 
+  });
+
+  initQueue();
+}
 
 async function pullFromSheet() {
     try {
@@ -260,8 +269,9 @@ async function pullFromSheet() {
 }
 if (realtimeInterval) clearInterval(realtimeInterval);
 realtimeInterval = setInterval(() => { if (navigator.onLine) pullFromSheet(); }, 30000);
+window.addEventListener("load", pullFromSheet);
 
-(function forceBypassLogin() {
+if (false) (function forceBypassLogin() {
     const loginOverlay = document.getElementById("loginOverlay");
     if (loginOverlay) loginOverlay.style.display = "none";
     if (!localStorage.getItem("vms_user")) localStorage.setItem("vms_user", JSON.stringify({ username: "admin", role: "SUPER_ADMIN" }));
@@ -446,7 +456,7 @@ window.saveStore = secureSave;
     document.getElementById('overlay').onclick = () => { document.getElementById('mobileSidebar').classList.remove('open'); document.getElementById('overlay').style.display='none'; };
     window.addEventListener('resize',()=>{ if(window.innerWidth>780){ document.getElementById('mobileSidebar').classList.remove('open'); document.getElementById('overlay').style.display='none'; } });
     document.getElementById('submitLicenseBtn').onclick = () => { let input = document.getElementById("licenseInput"); if(input) applyLicenseKey(input.value); input.value = ""; };
-    document.getElementById('doLoginBtn').onclick = () => { login("admin","123456"); };
+    document.getElementById('doLoginBtn').onclick = doLogin;
     document.getElementById('logoutBtnTop').onclick = logout; document.getElementById('logoutBtnSidebar').onclick = logout;
     document.getElementById('siteSelector').onchange = (e) => setSite(e.target.value); document.getElementById('siteSelectorTop').onchange = (e) => setSite(e.target.value);
     loadUserSession(); setSite(SITE_ID); renderDashboard(); renderLogTable(); if(typeof updateMonetizationUI === 'function') updateMonetizationUI(); applyLicenseUI();
@@ -455,45 +465,69 @@ window.saveStore = secureSave;
     toast("🔥 VMS FIX TOTAL - Real-time Sync + PDF Lengkap + Queue Hardening","success");
 })();
 
-// ================= VMS REALTIME SYNC ENGINE =================
+// ================= VMS REALTIME SYNC (FIXED) =================
 
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxI0gyyW2RfnH-trh25pna11czhUZOEobDA2jdiXlECyOTp1_LGrL7xxl_v5DsF1NQ6/exec"; 
 const SYNC_INTERVAL = 5000;
 let lastSyncHash = "";
 
-// 🔥 ambil data dari Google Sheet
 async function vmsPullRealtime() {
     try {
-        const res = await fetch(APPS_SCRIPT_URL + "?action=pull");
-        const json = await res.json();
-
-        if (!json || json.status !== "success") return;
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=pull&t=${Date.now()}`);
+        
+        if (!response.ok) throw new Error("Network offline");
+        
+        const json = await response.json();
+        
+        if (json.status !== "success" || !json.data) {
+            console.warn("Data belum siap atau status error");
+            return;
+        }
 
         const raw = JSON.stringify(json.data);
-        const hash = raw.length + raw.charCodeAt(0);
+        if (raw === lastSyncHash) return;
+        lastSyncHash = raw;
 
-        // ❗ kalau data sama → skip
-        if (hash === lastSyncHash) return;
-        lastSyncHash = hash;
+        console.log("🔄 DATA REFRESHED", new Date().toLocaleTimeString());
 
-        console.log("🔄 SYNC UPDATE");
-
-        // kirim ke mapper
         if (typeof vmsApplyData === "function") {
             vmsApplyData(json.data);
         }
 
     } catch (err) {
-        console.warn("SYNC ERROR:", err);
+        console.error("❌ SYNC ERROR:", err.message);
     }
 }
 
-// 🔁 auto jalan tiap 5 detik
-setInterval(vmsPullRealtime, SYNC_INTERVAL);
+function vmsApplyData(data) {
+    if (!Array.isArray(data) || data.length < 2) return;
 
-// 🚀 pertama kali load
-window.addEventListener("load", () => {
-    vmsPullRealtime();
-});
+    const rows = data.slice(1); 
+
+    window.vmsLogs = rows.map(r => ({
+        name: r[0] || "-",
+        company: r[1] || "-",
+        purpose: r[2] || "-",
+        pic: r[3] || "-",
+        start: r[4] || "-",
+        exp: r[5] || "-",
+        checkin: r[6] || "-",
+        checkout: r[7] || "-",
+        reg: r[8] || "-",
+        status: r[11] || "OUT",
+        alert: r[13] || ""
+    }));
+
+    // Trigger fungsi render yang ada di index.html lo
+    if (typeof renderVmsList === "function") {
+        renderVmsList();
+    } else if (typeof updateUI === "function") {
+        updateUI();
+    } else if (typeof renderData === "function") {
+        renderData();
+    }
+} 
+
 
 // ================= VMS DATA MAPPING (INDEX) =================
 
