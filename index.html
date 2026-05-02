@@ -88,34 +88,26 @@
 
 <script>
 // ==================== SECURE ELITE VMS v4.0 - SERVER-SIDE VALIDATION ====================
-// GLOBAL CONSTANTS
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx2CWOGoJbCyUV5srwKC6DPmMAKYowT19lUyN5_vKwm7l4ekOGaoLfcO69AyFa4YFA/exec";
 const SYNC_INTERVAL_MS = 8000;
 const QUEUE_RETRY_INTERVAL = 7000;
-const MAX_RETRY_COUNT = 5;
+const MAX_RETRY_COUNT = 3;
 const SPAM_THRESHOLD_MS = 1500;
 
-// Processed QR cache untuk anti-replay (client-side tambahan)
 let processedQRCache = new Map();
-const QR_CACHE_TTL = 30000; // 30 detik
-
-// SPAM PROTECTION
+const QR_CACHE_TTL = 30000;
 let lastActionTime = {};
 
 function isSpam(reg, actionType) {
     const key = `${reg}_${actionType}`;
     const now = Date.now();
-    if (!lastActionTime[key]) {
-        lastActionTime[key] = now;
-        return false;
-    }
+    if (!lastActionTime[key]) { lastActionTime[key] = now; return false; }
     const diff = now - lastActionTime[key];
     if (diff < SPAM_THRESHOLD_MS) return true;
     lastActionTime[key] = now;
     return false;
 }
 
-// QUEUE SYSTEM WITH EVENT ID
 let syncQueue = [];
 let isProcessingQueue = false;
 let queueInterval = null;
@@ -148,13 +140,17 @@ async function processQueue() {
     isProcessingQueue = true;
     const newQueue = [];
     for (const item of syncQueue) {
+        if (item.retryCount >= MAX_RETRY_COUNT) continue;
         try {
             const ok = await vmsSendToSheet(item.action, item.data, true);
             if (!ok) {
                 item.retryCount = (item.retryCount || 0) + 1;
                 if (item.retryCount < MAX_RETRY_COUNT) newQueue.push(item);
             }
-        } catch(e) { item.retryCount = (item.retryCount || 0) + 1; if (item.retryCount < MAX_RETRY_COUNT) newQueue.push(item); }
+        } catch(e) { 
+            item.retryCount = (item.retryCount || 0) + 1; 
+            if (item.retryCount < MAX_RETRY_COUNT) newQueue.push(item);
+        }
         await new Promise(r => setTimeout(r, 300));
     }
     syncQueue = newQueue;
@@ -199,28 +195,47 @@ async function vmsSendToSheet(action, data, isRetry = false) {
         const response = await fetch(APPS_SCRIPT_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params.toString() });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
-        if (result?.status !== "success") throw new Error(result?.message || "Server error");
+        
+        // FIX 1: Handle duplicate registration - stop retry loop
+        if (result?.status !== "success") {
+            const msg = result?.message || "";
+            if (msg.includes("sudah terdaftar") || msg.includes("ALREADY_REGISTERED") || msg.includes("Duplicate")) {
+                if (!isRetry && action === "register") {
+                    if (typeof toast === 'function') toast(`ℹ️ ${msg}`, "warning");
+                }
+                if (!isRetry) syncQueue = syncQueue.filter(q => !(q.data?.reg === data.reg && q.action === action));
+                persistQueue();
+                return true;
+            }
+            // FIX 2: Handle log/session that backend ignores (returns "IGNORED" or similar)
+            if (msg.includes("IGNORED") || msg.includes("ignored") || msg.includes("Log already") || msg.includes("Session already")) {
+                if (!isRetry) syncQueue = syncQueue.filter(q => !(q.data?.reg === data.reg && q.action === action));
+                persistQueue();
+                return true;
+            }
+            throw new Error(msg || "Server error");
+        }
+        
         if (!isRetry) syncQueue = syncQueue.filter(q => !(q.data?.reg === data.reg && q.action === action));
         persistQueue();
-        if (typeof toast === 'function') toast(`✅ ${result.message || "Sync OK"}`, "success");
+        if (typeof toast === 'function' && !isRetry && action !== "log" && action !== "session") toast(`✅ ${result.message || "Sync OK"}`, "success");
         return true;
     } catch (error) {
         console.error(`❌ ${action} FAIL:`, error);
+        // FIX 3: CORS/Network failsafe - queue with delay
         if (!isRetry && !isDuplicateInQueue(action, data.reg, eventId)) {
             syncQueue.push({ id: generateReqId(), action, data: { ...data, eventId }, retryCount: 0, timestamp: Date.now() });
             persistQueue();
-            if (typeof toast === 'function') toast(`⚠️ Queued`, "warning");
+            if (typeof toast === 'function') toast(`⚠️ Queued (${action})`, "warning");
         }
         return false;
     }
 }
 
-// ==================== SERVER-SIDE QR OPERATIONS ====================
-// QR generation via server (Apps Script) - SECURE
 async function generateSecureQR(reg, visitorData) {
     try {
         const params = new URLSearchParams();
-        params.append("action", "generateQR");
+        params.append("action", "generateqr");
         params.append("reg", reg);
         params.append("nama", visitorData.nama || "");
         params.append("perusahaan", visitorData.perusahaan || "");
@@ -231,22 +246,19 @@ async function generateSecureQR(reg, visitorData) {
         const response = await fetch(APPS_SCRIPT_URL, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: params.toString() });
         if (!response.ok) throw new Error("QR generation failed");
         const result = await response.json();
-        if (result.status === "success" && result.qrData) {
-            return result.qrData;
-        }
+        if (result.status === "success" && result.qrData) return result.qrData;
         throw new Error(result.message || "QR generation failed");
     } catch (error) {
         console.error("QR generation error:", error);
-        toast("Gagal generate QR via server", "error");
+        if (typeof toast === 'function') toast("Gagal generate QR via server", "error");
         return null;
     }
 }
 
-// QR validation via server (Anti-replay, Anti-forgery)
 async function validateSecureQR(qrText, mode, siteId, deviceId) {
     try {
         const params = new URLSearchParams();
-        params.append("action", "validateQR");
+        params.append("action", "validateqr");
         params.append("qrData", qrText);
         params.append("mode", mode);
         params.append("site", siteId);
@@ -259,25 +271,22 @@ async function validateSecureQR(qrText, mode, siteId, deviceId) {
         
         if (result.status === "success") {
             return { valid: true, reg: result.reg, visitorData: result.visitorData, tokenId: result.tokenId };
-        } else if (result.status === "replay") {
-            toast("⚠️ QR sudah pernah digunakan! (Anti-replay)", "warning");
+        } else if (result.message?.includes("replay") || result.status === "replay") {
+            if (typeof toast === 'function') toast("⚠️ QR sudah pernah digunakan! (Anti-replay)", "warning");
             return { valid: false, error: "replay" };
-        } else if (result.status === "expired") {
-            toast("⚠️ QR sudah expired!", "warning");
+        } else if (result.message?.includes("expired") || result.status === "expired") {
+            if (typeof toast === 'function') toast("⚠️ QR sudah expired!", "warning");
             return { valid: false, error: "expired" };
-        } else if (result.status === "invalid") {
-            toast("❌ QR tidak valid!", "error");
-            return { valid: false, error: "invalid" };
         }
-        return { valid: false, error: result.message || "unknown" };
+        if (typeof toast === 'function') toast("❌ QR tidak valid!", "error");
+        return { valid: false, error: "invalid" };
     } catch (error) {
         console.error("QR validation error:", error);
-        toast("Gagal validasi QR", "error");
+        if (typeof toast === 'function') toast("Gagal validasi QR", "error");
         return { valid: false, error: "network" };
     }
 }
 
-// REALTIME SYNC - FULL COMMAND CENTER
 let isSyncing = false;
 let lastSyncHash = "";
 let lastManualSync = 0;
@@ -317,77 +326,46 @@ function vmsApplyDataFromSheet(sheetData) {
     for (const row of rows) {
         const reg = row[8];
         if (!reg) continue;
-        
         const sheetUpdatedAt = row[17] ? new Date(row[17]).getTime() : 0;
-        
         sheetVisitorMap.set(reg, {
-            nama: row[0] || "",
-            perusahaan: row[1] || "",
-            tujuan: row[2] || "",
-            pic: row[3] || "",
-            startDate: row[4] || "",
-            expDate: row[5] || "",
-            currentStatus: row[11] === "IN" ? "IN" : "OUT",
-            lastCheckin: row[6] || "",
-            lastCheckout: row[7] || "",
-            kategori: row[14] || "UMUM",
-            dept: row[15] || "",
-            sheetUpdatedAt: sheetUpdatedAt,
-            updatedAt: Date.now()
+            nama: row[0] || "", perusahaan: row[1] || "", tujuan: row[2] || "", pic: row[3] || "",
+            startDate: row[4] || "", expDate: row[5] || "", currentStatus: row[11] === "IN" ? "IN" : "OUT",
+            lastCheckin: row[6] || "", lastCheckout: row[7] || "", kategori: row[14] || "UMUM",
+            dept: row[15] || "", sheetUpdatedAt: sheetUpdatedAt, updatedAt: Date.now()
         });
-        
         if (row[10]) {
             const logKey = row[10].toString() + (row[16] || reg);
             if (!sheetLogsMap.has(logKey)) {
                 sheetLogsMap.set(logKey, {
-                    reg: reg,
-                    name: row[0] || "",
-                    company: row[1] || "",
-                    category: row[14] || "UMUM",
+                    reg: reg, name: row[0] || "", company: row[1] || "", category: row[14] || "UMUM",
                     action: row[9] || (row[11] === "IN" ? "CHECK_IN" : "CHECK_OUT"),
-                    time: new Date(row[10]).getTime() || Date.now(),
-                    site: row[12] || "SITE_A",
-                    logId: row[16] || ""
+                    time: new Date(row[10]).getTime() || Date.now(), site: row[12] || "SITE_A", logId: row[16] || ""
                 });
             }
         }
-        
         if (row[6] && row[6] !== "") {
             const sessionKey = `${reg}_${row[6]}`;
             if (!sheetSessionsMap.has(sessionKey)) {
-                sheetSessionsMap.set(sessionKey, {
-                    reg: reg,
-                    checkIn: row[6],
-                    checkOut: row[7] || null,
-                    duration: row[12] || ""
-                });
+                sheetSessionsMap.set(sessionKey, { reg: reg, checkIn: row[6], checkOut: row[7] || null, duration: row[12] || "" });
             }
         }
     }
     
-    // Timestamp-based conflict resolution
     for (const [reg, sheetVisitor] of sheetVisitorMap) {
         for (const siteKey in window.visitors) {
             if (siteKey.endsWith("_" + reg)) {
                 const existing = window.visitors[siteKey];
                 const localUpdatedAt = existing?.updatedAt || 0;
                 if (sheetVisitor.sheetUpdatedAt >= localUpdatedAt) {
-                    window.visitors[siteKey] = {
-                        ...existing,
-                        ...sheetVisitor,
-                        updatedAt: Date.now()
-                    };
+                    window.visitors[siteKey] = { ...existing, ...sheetVisitor, updatedAt: Date.now() };
                 }
                 break;
             }
         }
     }
-    
     if (sheetLogsMap.size > 0) {
         window.logs = Array.from(sheetLogsMap.values()).sort((a,b) => b.time - a.time).slice(0, 1000);
     }
-    
-    // MERGE SESSIONS
     if (sheetSessionsMap.size > 0 && window.visitors) {
         for (const [reg, sessionData] of sheetSessionsMap) {
             for (const siteKey in window.visitors) {
@@ -398,10 +376,7 @@ function vmsApplyDataFromSheet(sheetData) {
                         const checkInTime = new Date(sessionData.checkIn).getTime();
                         const exists = visitor.sessions.some(s => Math.abs(s.checkIn - checkInTime) < 1000);
                         if (!exists) {
-                            visitor.sessions.push({
-                                checkIn: checkInTime,
-                                checkOut: sessionData.checkOut ? new Date(sessionData.checkOut).getTime() : null
-                            });
+                            visitor.sessions.push({ checkIn: checkInTime, checkOut: sessionData.checkOut ? new Date(sessionData.checkOut).getTime() : null });
                             visitor.sessions.sort((a,b) => b.checkIn - a.checkIn);
                             window.visitors[siteKey] = { ...visitor };
                         }
@@ -411,16 +386,13 @@ function vmsApplyDataFromSheet(sheetData) {
             }
         }
     }
-    
     if (typeof renderLogTable === 'function') renderLogTable();
     if (typeof renderDashboard === 'function') renderDashboard();
     if (typeof window.secureSave === 'function') window.secureSave();
 }
 
-// SCANNER LOCK
 let scannerLock = false;
 
-// CORE APPLICATION
 (function() {
     let visitors = {}, logs = [];
     let SITE_ID = localStorage.getItem("vms_site") || "SITE_A";
@@ -433,115 +405,44 @@ let scannerLock = false;
     let deviceId = localStorage.getItem('vms_device_id');
     if (!deviceId) { deviceId = 'dev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 8); localStorage.setItem('vms_device_id', deviceId); }
     
-    window.secureSave = function() { 
-        localStorage.setItem("vms_visitors", JSON.stringify(visitors)); 
-        localStorage.setItem("vms_logs", JSON.stringify(logs)); 
-    };
-    
-    function secureLoad() { 
-        try { 
-            let v = localStorage.getItem("vms_visitors"); if(v) visitors = JSON.parse(v); 
-            let l = localStorage.getItem("vms_logs"); if(l) logs = JSON.parse(l); 
-            window.visitors = visitors;
-            window.logs = logs;
-        } catch(e) { console.warn(e); } 
-    }
-    
+    window.secureSave = function() { localStorage.setItem("vms_visitors", JSON.stringify(visitors)); localStorage.setItem("vms_logs", JSON.stringify(logs)); };
+    function secureLoad() { try { let v = localStorage.getItem("vms_visitors"); if(v) visitors = JSON.parse(v); let l = localStorage.getItem("vms_logs"); if(l) logs = JSON.parse(l); window.visitors = visitors; window.logs = logs; } catch(e) { console.warn(e); } }
     function toast(msg, type='info'){ let t = document.createElement('div'); t.className = `toast-msg ${type}`; t.innerText = msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3000); }
     window.toast = toast;
     
-    function generateReg() {
-        let reg; let attempts = 0;
-        do { reg = "REG" + Date.now() + Math.floor(Math.random() * 10000); attempts++; if (attempts > 15) break; } 
-        while (visitors[SITE_ID + "_" + reg]);
-        return reg;
-    }
+    function generateReg() { let reg; let attempts = 0; do { reg = "REG" + Date.now() + Math.floor(Math.random() * 10000); attempts++; if (attempts > 15) break; } while (visitors[SITE_ID + "_" + reg]); return reg; }
     
     function addLog(regRaw, action){ 
-        let siteKey = SITE_ID + "_" + regRaw; 
-        let v = visitors[siteKey]; 
-        const logId = generateLogId(regRaw);
-        const newLog = { 
-            reg: regRaw, 
-            name: v?.nama || regRaw, 
-            company: v?.perusahaan || '', 
-            category: v?.kategori || 'UMUM', 
-            action, 
-            time: Date.now(), 
-            site: SITE_ID, 
-            deviceId,
-            logId: logId
-        }; 
-        logs.unshift(newLog); 
-        logs = logs.slice(0, 1000); 
-        window.secureSave();
-        
-        vmsSendToSheet("log", {
-            reg: regRaw,
-            logId: logId,
-            logAction: action,
-            logTime: Date.now(),
-            site: SITE_ID,
-            deviceId: deviceId,
-            name: v?.nama || ""
-        });
+        let siteKey = SITE_ID + "_" + regRaw; let v = visitors[siteKey]; const logId = generateLogId(regRaw);
+        const newLog = { reg: regRaw, name: v?.nama || regRaw, company: v?.perusahaan || '', category: v?.kategori || 'UMUM', action, time: Date.now(), site: SITE_ID, deviceId, logId: logId }; 
+        logs.unshift(newLog); logs = logs.slice(0, 1000); window.secureSave();
+        vmsSendToSheet("log", { reg: regRaw, logId: logId, logAction: action, logTime: Date.now(), site: SITE_ID, deviceId: deviceId, name: v?.nama || "" });
     }
     
     function addSession(reg, checkIn, checkOut = null) {
         const sessionId = generateSessionId(reg);
-        vmsSendToSheet("session", {
-            reg: reg,
-            sessionId: sessionId,
-            checkIn: checkIn,
-            checkOut: checkOut,
-            duration: checkOut ? Math.floor((checkOut - checkIn) / 60000) + " minutes" : "active",
-            site: SITE_ID,
-            deviceId: deviceId
-        });
+        vmsSendToSheet("session", { reg: reg, sessionId: sessionId, checkIn: checkIn, checkOut: checkOut, duration: checkOut ? Math.floor((checkOut - checkIn) / 60000) + " minutes" : "active", site: SITE_ID, deviceId: deviceId });
     }
     
     async function downloadPDFStable(reg, data){
-        try { 
-            await ensureJsPDFReady(); 
-            const { jsPDF } = window.jspdf; 
-            const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' }); 
+        try { await ensureJsPDFReady(); const { jsPDF } = window.jspdf; const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' }); 
             doc.setFillColor(31,78,74); doc.rect(0,0,210,40,'F'); doc.setTextColor(255,255,255); doc.setFontSize(22); doc.text("SECURE INVITATION",105,20,{align:"center"});
-            doc.setTextColor(0,0,0); doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text("VISITOR INFORMATION",20,60); 
-            let y=75; doc.setFontSize(10); doc.setFont(undefined,'normal');
-            doc.text(`Name : ${data.nama||"-"}`,20,y); y+=8;
-            doc.text(`Company : ${data.perusahaan||"-"}`,20,y); y+=8;
-            doc.text(`Purpose : ${data.tujuan||"-"}`,20,y); y+=8;
-            doc.text(`PIC : ${data.pic||"-"}`,20,y); y+=8;
-            doc.text(`Department : ${data.dept||"-"}`,20,y); y+=8;
-            doc.text(`REG Number : ${reg}`,20,y); y+=8;
-            doc.text(`Start Date : ${data.startDate||"-"}`,20,y); y+=8;
-            doc.text(`Expired Date : ${data.expDate||"-"}`,20,y); y+=8;
+            doc.setTextColor(0,0,0); doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text("VISITOR INFORMATION",20,60); let y=75; doc.setFontSize(10); doc.setFont(undefined,'normal');
+            doc.text(`Name : ${data.nama||"-"}`,20,y); y+=8; doc.text(`Company : ${data.perusahaan||"-"}`,20,y); y+=8;
+            doc.text(`Purpose : ${data.tujuan||"-"}`,20,y); y+=8; doc.text(`PIC : ${data.pic||"-"}`,20,y); y+=8;
+            doc.text(`Department : ${data.dept||"-"}`,20,y); y+=8; doc.text(`REG Number : ${reg}`,20,y); y+=8;
+            doc.text(`Start Date : ${data.startDate||"-"}`,20,y); y+=8; doc.text(`Expired Date : ${data.expDate||"-"}`,20,y); y+=8;
             doc.text(`Status : ${data.currentStatus === "IN" ? "IN (Inside Area)" : "OUT"}`,20,y);
-            
-            // Generate secure QR via server for PDF
             const secureQR = await generateSecureQR(reg, data);
-            if(secureQR) {
-                try {
-                    const qrCanvas = document.createElement('canvas');
-                    await QRCode.toCanvas(qrCanvas, secureQR, { width: 150, margin: 1 });
-                    const qrBase64 = qrCanvas.toDataURL("image/png");
-                    doc.addImage(qrBase64, 'PNG', 140, 70, 50, 50);
-                } catch(e) { console.warn("QR in PDF failed"); }
-            }
-            
-            const blob = doc.output("blob"); const url = URL.createObjectURL(blob); const a = document.createElement("a");
-            a.href = url; a.download = `SECURE_INVITE_${reg}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            setTimeout(() => URL.revokeObjectURL(url), 3000);
-            toast(`PDF ${reg} success`, "success");
-            return true;
+            if(secureQR) { try { const qrCanvas = document.createElement('canvas'); await QRCode.toCanvas(qrCanvas, secureQR, { width: 150, margin: 1 }); const qrBase64 = qrCanvas.toDataURL("image/png"); doc.addImage(qrBase64, 'PNG', 140, 70, 50, 50); } catch(e) {} }
+            const blob = doc.output("blob"); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `SECURE_INVITE_${reg}.pdf`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 3000); toast(`PDF ${reg} success`, "success"); return true;
         } catch(err){ console.error("PDF ERROR:", err); toast("Error PDF", "error"); return false; }
     }
     
     async function ensureJsPDFReady(){ if(window.jspdf) return true; return new Promise((resolve)=>{ let i=0; const iv=setInterval(()=>{ if(window.jspdf){ clearInterval(iv); resolve(true); } if(i++>100){ clearInterval(iv); resolve(false); } },100); }); }
     
-    function showPreview(reg, data){ 
-        let modal = document.createElement('div'); modal.className = 'modal-overlay'; 
-        modal.innerHTML = `<div class="modal-card"><h3>📄 Secure Preview</h3><div style="background:#f8fafc; padding:14px; border-radius:20px; margin-bottom:16px;"><p><strong>Name</strong> : ${data.nama}</p><p><strong>Company</strong> : ${data.perusahaan}</p><p><strong>Purpose</strong> : ${data.tujuan}</p><p><strong>PIC</strong> : ${data.pic}</p><p><strong>Department</strong> : ${data.dept}</p><p><strong>Validity</strong> : ${data.startDate} → ${data.expDate}</p><p><strong>REG</strong> : ${reg}</p><p style="color:#1f4e4a;"><strong>🔐 Server-Signed QR</strong></p></div><div class="flex-btns"><button id="confirmDownloadBtn">Download Secure PDF</button><button id="closePreviewBtn" class="btn-outline">Close</button></div></div>`;
+    function showPreview(reg, data){ let modal = document.createElement('div'); modal.className = 'modal-overlay'; modal.innerHTML = `<div class="modal-card"><h3>📄 Secure Preview</h3><div style="background:#f8fafc; padding:14px; border-radius:20px; margin-bottom:16px;"><p><strong>Name</strong> : ${data.nama}</p><p><strong>Company</strong> : ${data.perusahaan}</p><p><strong>Purpose</strong> : ${data.tujuan}</p><p><strong>PIC</strong> : ${data.pic}</p><p><strong>Department</strong> : ${data.dept}</p><p><strong>Validity</strong> : ${data.startDate} → ${data.expDate}</p><p><strong>REG</strong> : ${reg}</p><p style="color:#1f4e4a;"><strong>🔐 Server-Signed QR</strong></p></div><div class="flex-btns"><button id="confirmDownloadBtn">Download Secure PDF</button><button id="closePreviewBtn" class="btn-outline">Close</button></div></div>`;
         document.body.appendChild(modal); setTimeout(()=>modal.classList.add('active'),10);
         modal.querySelector('#confirmDownloadBtn').onclick = async () => { if(window.isDownloading) return; window.isDownloading=true; await downloadPDFStable(reg,data); window.isDownloading=false; modal.remove(); };
         modal.querySelector('#closePreviewBtn').onclick = () => modal.remove();
@@ -549,179 +450,32 @@ let scannerLock = false;
     
     function setSite(site){ SITE_ID = site; localStorage.setItem("vms_site", SITE_ID); document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel=> sel.value = site); toast(`Site: ${SITE_ID}`, "success"); renderDashboard(); renderLogTable(); }
     
-    function renderDashboard(){ 
-        try { 
-            let v = Object.values(visitors); 
-            let active = v.filter(x=>x.currentStatus==="IN").length; 
-            let todayLogs = logs.filter(l=> new Date(l.time).toDateString()===new Date().toDateString() && l.action==="CHECK_IN"); 
-            document.getElementById('statsWidget').innerHTML = `<div class="stat-card"><h4>Total Visitors</h4><div class="stat-number">${v.length}</div></div><div class="stat-card"><h4>Active Inside</h4><div class="stat-number">${active}</div></div><div class="stat-card"><h4>Check-ins Today</h4><div class="stat-number">${todayLogs.length}</div></div>`; 
-            let last7 = [...Array(7)].map((_,i)=>{let d=new Date(); d.setDate(d.getDate()-i); return d.toLocaleDateString('id',{weekday:'short'});}).reverse(); 
-            let trend = last7.map((_,i)=>{let d=new Date(); d.setDate(d.getDate()-(6-i)); return logs.filter(l=>new Date(l.time).toDateString()===d.toDateString() && l.action==="CHECK_IN").length;}); 
-            if(window.Chart && document.getElementById('trendChart')) { 
-                if(window.lineChart) window.lineChart.destroy(); 
-                window.lineChart = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:last7, datasets:[{ label:'Visit trend', data:trend, borderColor:'#1f4e4a', fill:false }] } }); 
-                let catCount = { VVIP:0, VIP:0, UMUM:0 }; v.forEach(x=>{ if(x.kategori) catCount[x.kategori]++; }); 
-                if(window.pieChart) window.pieChart.destroy(); 
-                window.pieChart = new Chart(document.getElementById('categoryChart'), { type:'pie', data:{ labels:['VVIP','VIP','UMUM'], datasets:[{ data:[catCount.VVIP,catCount.VIP,catCount.UMUM], backgroundColor:['#fbbf24','#94a3b8','#1f4e4a'] }] } }); 
-            } 
-        } catch(e) { console.error(e); } 
-    }
+    function renderDashboard(){ try { let v = Object.values(visitors); let active = v.filter(x=>x.currentStatus==="IN").length; let todayLogs = logs.filter(l=> new Date(l.time).toDateString()===new Date().toDateString() && l.action==="CHECK_IN"); document.getElementById('statsWidget').innerHTML = `<div class="stat-card"><h4>Total Visitors</h4><div class="stat-number">${v.length}</div></div><div class="stat-card"><h4>Active Inside</h4><div class="stat-number">${active}</div></div><div class="stat-card"><h4>Check-ins Today</h4><div class="stat-number">${todayLogs.length}</div></div>`; let last7 = [...Array(7)].map((_,i)=>{let d=new Date(); d.setDate(d.getDate()-i); return d.toLocaleDateString('id',{weekday:'short'});}).reverse(); let trend = last7.map((_,i)=>{let d=new Date(); d.setDate(d.getDate()-(6-i)); return logs.filter(l=>new Date(l.time).toDateString()===d.toDateString() && l.action==="CHECK_IN").length;}); if(window.Chart && document.getElementById('trendChart')) { if(window.lineChart) window.lineChart.destroy(); window.lineChart = new Chart(document.getElementById('trendChart'), { type:'line', data:{ labels:last7, datasets:[{ label:'Visit trend', data:trend, borderColor:'#1f4e4a', fill:false }] } }); let catCount = { VVIP:0, VIP:0, UMUM:0 }; v.forEach(x=>{ if(x.kategori) catCount[x.kategori]++; }); if(window.pieChart) window.pieChart.destroy(); window.pieChart = new Chart(document.getElementById('categoryChart'), { type:'pie', data:{ labels:['VVIP','VIP','UMUM'], datasets:[{ data:[catCount.VVIP,catCount.VIP,catCount.UMUM], backgroundColor:['#fbbf24','#94a3b8','#1f4e4a'] }] } }); } } catch(e) { console.error(e); } }
     
-    function renderLogTable(){ 
-        try { 
-            let search = document.getElementById('searchLog')?.value.toLowerCase() || ''; 
-            let filtered = logs.filter(l=> (l.name?.toLowerCase().includes(search) || l.reg?.toLowerCase().includes(search)) && (!l.site || l.site === SITE_ID)); 
-            let tbody = document.getElementById('logTableBody'); if(!tbody) return; tbody.innerHTML = ""; 
-            filtered.slice(0, 500).forEach(l=>{ 
-                let row = tbody.insertRow(); 
-                row.insertCell(0).innerHTML = `<input type="checkbox" class="logCheckItem" data-reg="${l.reg}">`; 
-                row.insertCell(1).innerText = l.reg; 
-                row.insertCell(2).innerText = l.name; 
-                row.insertCell(3).innerText = l.company; 
-                row.insertCell(4).innerHTML = `<span class="badge badge-${l.category}">${l.category}</span>`; 
-                row.insertCell(5).innerText = l.action; 
-                row.insertCell(6).innerText = new Date(l.time).toLocaleString(); 
-                row.insertCell(7).innerText = l.site || "SITE_A"; 
-                let btn = document.createElement('button'); btn.innerText="PDF"; btn.classList.add('btn-outline'); btn.style.padding="4px 12px"; 
-                btn.onclick = () => { let siteKey = SITE_ID + "_" + l.reg; let v = visitors[siteKey]; if(v) showPreview(l.reg, v); }; 
-                row.insertCell(8).appendChild(btn); 
-            }); 
-        } catch(e) { console.error(e); } 
-    }
+    function renderLogTable(){ try { let search = document.getElementById('searchLog')?.value.toLowerCase() || ''; let filtered = logs.filter(l=> (l.name?.toLowerCase().includes(search) || l.reg?.toLowerCase().includes(search)) && (!l.site || l.site === SITE_ID)); let tbody = document.getElementById('logTableBody'); if(!tbody) return; tbody.innerHTML = ""; filtered.slice(0, 500).forEach(l=>{ let row = tbody.insertRow(); row.insertCell(0).innerHTML = `<input type="checkbox" class="logCheckItem" data-reg="${l.reg}">`; row.insertCell(1).innerText = l.reg; row.insertCell(2).innerText = l.name; row.insertCell(3).innerText = l.company; row.insertCell(4).innerHTML = `<span class="badge badge-${l.category}">${l.category}</span>`; row.insertCell(5).innerText = l.action; row.insertCell(6).innerText = new Date(l.time).toLocaleString(); row.insertCell(7).innerText = l.site || "SITE_A"; let btn = document.createElement('button'); btn.innerText="PDF"; btn.classList.add('btn-outline'); btn.style.padding="4px 12px"; btn.onclick = () => { let siteKey = SITE_ID + "_" + l.reg; let v = visitors[siteKey]; if(v) showPreview(l.reg, v); }; row.insertCell(8).appendChild(btn); }); } catch(e) { console.error(e); } }
     
-    // SERVER-SIDE VALIDATED SCAN
     async function processSecureScan(qrText, mode) { 
         if (isSpam(qrText.substring(0, 20), mode)) { toast("Too fast", "warning"); return false; }
-        
-        // Client-side anti-replay cache
-        if (processedQRCache.has(qrText)) {
-            toast("⚠️ QR sudah diproses (anti-replay)", "warning");
-            return false;
-        }
-        
+        if (processedQRCache.has(qrText)) { toast("⚠️ QR sudah diproses (anti-replay)", "warning"); return false; }
         const validation = await validateSecureQR(qrText, mode, SITE_ID, deviceId);
-        
-        if (!validation.valid) {
-            if (validation.error === "replay") {
-                // Mark as replayed
-                processedQRCache.set(qrText, { replayed: true, timestamp: Date.now() });
-                setTimeout(() => processedQRCache.delete(qrText), QR_CACHE_TTL);
-            }
-            return false;
-        }
-        
-        const reg = validation.reg;
-        const visitorData = validation.visitorData;
-        
-        // Mark QR as used
-        processedQRCache.set(qrText, { used: true, reg: reg, timestamp: Date.now() });
-        setTimeout(() => processedQRCache.delete(qrText), QR_CACHE_TTL);
-        
-        if (lastScanTime[reg] && Date.now() - lastScanTime[reg] < SPAM_THRESHOLD_MS){ toast("Too fast","warning"); return false; } 
-        lastScanTime[reg] = Date.now(); 
-        if(processingRegs.has(reg)){ toast("Processing","warning"); return false; } 
-        processingRegs.add(reg); 
-        
-        try { 
-            let siteKey = SITE_ID + "_" + reg; 
-            let visitor = visitors[siteKey]; 
-            if(!visitor){ 
-                // Create from server data
-                visitor = {
-                    nama: visitorData.nama,
-                    perusahaan: visitorData.perusahaan,
-                    kategori: visitorData.kategori || "UMUM",
-                    tujuan: visitorData.tujuan,
-                    pic: visitorData.pic,
-                    dept: visitorData.dept,
-                    startDate: visitorData.startDate,
-                    expDate: visitorData.expDate,
-                    foto: "",
-                    sessions: [],
-                    currentStatus: "OUT",
-                    updatedAt: Date.now()
-                };
-                visitors[siteKey] = visitor;
-            }
-            
-            let exp = new Date(visitor.expDate); exp.setHours(23,59,59,999); 
-            if(exp < new Date()){ toast("Visitor expired","error"); return false; } 
-            
-            // Anti double IN
-            if (mode === "CHECK_IN") {
-                const hasOpenSession = visitor.sessions?.some(s => !s.checkOut);
-                if (hasOpenSession) {
-                    toast("Already checked IN!", "warning");
-                    return false;
-                }
-            }
-            
+        if (!validation.valid) { if (validation.error === "replay") { processedQRCache.set(qrText, { replayed: true, timestamp: Date.now() }); setTimeout(() => processedQRCache.delete(qrText), QR_CACHE_TTL); } return false; }
+        const reg = validation.reg; const visitorData = validation.visitorData;
+        processedQRCache.set(qrText, { used: true, reg: reg, timestamp: Date.now() }); setTimeout(() => processedQRCache.delete(qrText), QR_CACHE_TTL);
+        if (lastScanTime[reg] && Date.now() - lastScanTime[reg] < SPAM_THRESHOLD_MS){ toast("Too fast","warning"); return false; } lastScanTime[reg] = Date.now(); if(processingRegs.has(reg)){ toast("Processing","warning"); return false; } processingRegs.add(reg); 
+        try { let siteKey = SITE_ID + "_" + reg; let visitor = visitors[siteKey]; if(!visitor){ visitor = { nama: visitorData.nama, perusahaan: visitorData.perusahaan, kategori: visitorData.kategori || "UMUM", tujuan: visitorData.tujuan, pic: visitorData.pic, dept: visitorData.dept, startDate: visitorData.startDate, expDate: visitorData.expDate, foto: "", sessions: [], currentStatus: "OUT", updatedAt: Date.now() }; visitors[siteKey] = visitor; }
+            let exp = new Date(visitor.expDate); exp.setHours(23,59,59,999); if(exp < new Date()){ toast("Visitor expired","error"); return false; } 
+            if (mode === "CHECK_IN") { const hasOpenSession = visitor.sessions?.some(s => !s.checkOut); if (hasOpenSession) { toast("Already checked IN!", "warning"); return false; } }
             let actionTime = Date.now();
-            if(mode === "CHECK_IN"){ 
-                if(!visitor.sessions) visitor.sessions = []; 
-                visitor.sessions.push({ checkIn: actionTime, checkOut: null }); 
-                visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: actionTime }; 
-                addLog(reg, "CHECK_IN"); 
-                addSession(reg, actionTime, null);
-                await vmsSendToSheet("checkin", { reg, checkinTime: actionTime, site: SITE_ID, deviceId }); 
-                toast(`✅ SECURE CHECK-IN ${visitor.nama}`, "success"); 
-            } else { 
-                if(!visitor.sessions) visitor.sessions = []; 
-                let openSession = null; let sessionIndex = -1;
-                for(let i = visitor.sessions.length - 1; i >= 0; i--){ if(!visitor.sessions[i].checkOut){ openSession = visitor.sessions[i]; sessionIndex = i; break; } } 
-                if(!openSession){ toast("No active session","warning"); visitor.sessions.push({ checkIn: actionTime, checkOut: actionTime }); } 
-                else { 
-                    openSession.checkOut = actionTime; 
-                    visitor.sessions[sessionIndex] = openSession;
-                    addSession(reg, openSession.checkIn, actionTime);
-                } 
-                visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: actionTime }; 
-                addLog(reg, "CHECK_OUT"); 
-                await vmsSendToSheet("checkout", { reg, checkoutTime: actionTime, site: SITE_ID, deviceId }); 
-                toast(`✅ SECURE CHECK-OUT ${visitor.nama}`, "success"); 
-            } 
-            renderDashboard(); renderLogTable(); window.secureSave(); 
-            safeManualSync();
-            return true;
+            if(mode === "CHECK_IN"){ if(!visitor.sessions) visitor.sessions = []; visitor.sessions.push({ checkIn: actionTime, checkOut: null }); visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: actionTime }; addLog(reg, "CHECK_IN"); addSession(reg, actionTime, null); await vmsSendToSheet("checkin", { reg, checkinTime: actionTime, site: SITE_ID, deviceId }); toast(`✅ SECURE CHECK-IN ${visitor.nama}`, "success"); } 
+            else { if(!visitor.sessions) visitor.sessions = []; let openSession = null; let sessionIndex = -1; for(let i = visitor.sessions.length - 1; i >= 0; i--){ if(!visitor.sessions[i].checkOut){ openSession = visitor.sessions[i]; sessionIndex = i; break; } } if(!openSession){ toast("No active session","warning"); visitor.sessions.push({ checkIn: actionTime, checkOut: actionTime }); } else { openSession.checkOut = actionTime; visitor.sessions[sessionIndex] = openSession; addSession(reg, openSession.checkIn, actionTime); } visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: actionTime }; addLog(reg, "CHECK_OUT"); await vmsSendToSheet("checkout", { reg, checkoutTime: actionTime, site: SITE_ID, deviceId }); toast(`✅ SECURE CHECK-OUT ${visitor.nama}`, "success"); } 
+            renderDashboard(); renderLogTable(); window.secureSave(); safeManualSync(); return true;
         } finally { setTimeout(()=>processingRegs.delete(reg), 1200); } 
     }
     
-    // SCANNER with LOCK
-    async function initScanner() { 
-        if (scannerInstance) await stopScanner(); 
-        try { 
-            const cameras = await Html5Qrcode.getCameras(); 
-            if (!cameras || cameras.length === 0) { toast("No camera", "error"); return false; } 
-            currentCameraId = cameras[0].id; 
-            scannerInstance = new Html5Qrcode("cameraPreview"); 
-            return true; 
-        } catch (err) { toast("Camera init failed", "error"); return false; } 
-    }
+    async function initScanner() { if (scannerInstance) await stopScanner(); try { const cameras = await Html5Qrcode.getCameras(); if (!cameras || cameras.length === 0) { toast("No camera", "error"); return false; } currentCameraId = cameras[0].id; scannerInstance = new Html5Qrcode("cameraPreview"); return true; } catch (err) { toast("Camera init failed", "error"); return false; } }
+    async function startScanner() { if (scannerLock) { toast("Initializing...", "warning"); return; } if (isScanning) return; scannerLock = true; try { if (!scannerInstance) { const init = await initScanner(); if (!init) { scannerLock = false; return; } } await scannerInstance.start(currentCameraId, { fps: 10, qrbox: { width: 280, height: 280 }, aspectRatio: 1.0 }, async (decodedText) => { const mode = document.getElementById('scanMode').value; await processSecureScan(decodedText, mode); }, (error) => { if (error && !error.includes("No MultiFormat Readers")) console.log("error:", error); } ); isScanning = true; toast("Secure Scanner ready", "success"); } catch (err) { toast("Start failed: " + err.message, "error"); isScanning = false; } finally { scannerLock = false; } }
+    async function stopScanner() { if (scannerInstance && isScanning) { try { await scannerInstance.stop(); await scannerInstance.clear(); } catch (err) {} } isScanning = false; }
     
-    async function startScanner() { 
-        if (scannerLock) { toast("Initializing...", "warning"); return; }
-        if (isScanning) return; 
-        scannerLock = true;
-        try {
-            if (!scannerInstance) { const init = await initScanner(); if (!init) { scannerLock = false; return; } } 
-            await scannerInstance.start(currentCameraId, { fps: 10, qrbox: { width: 280, height: 280 }, aspectRatio: 1.0 }, 
-                async (decodedText) => { 
-                    const mode = document.getElementById('scanMode').value;
-                    await processSecureScan(decodedText, mode); 
-                }, 
-                (error) => { if (error && !error.includes("No MultiFormat Readers")) console.log("error:", error); } 
-            ); 
-            isScanning = true; toast("Secure Scanner ready", "success"); 
-        } catch (err) { toast("Start failed: " + err.message, "error"); isScanning = false; } 
-        finally { scannerLock = false; }
-    }
-    
-    async function stopScanner() { 
-        if (scannerInstance && isScanning) { try { await scannerInstance.stop(); await scannerInstance.clear(); } catch (err) {} } 
-        isScanning = false; 
-    }
-    
-    // Event Handlers
     document.getElementById('generateQRBtn').onclick = async () => {
         let nama = document.getElementById('regName').value, perusahaan = document.getElementById('regCompany').value, kategori = document.getElementById('regCategory').value;
         let tujuan = document.getElementById('regPurpose').value, custom = document.getElementById('regCustomPurpose').value;
@@ -730,261 +484,60 @@ let scannerLock = false;
         let startDate = document.getElementById('regStartDate').value || new Date().toISOString().slice(0,10);
         let expDate = document.getElementById('regExpDate').value;
         if(!nama || !perusahaan || !pic || !dept || !expDate){ toast("Complete all fields","error"); return; }
-        
-        let reg = generateReg();
-        let foto = ""; 
-        let file = document.getElementById('regPhotoFile').files[0];
-        if(file){ 
-            let reader = await new Promise(r=>{let fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(file);});
-            let img = new Image(); img.src = reader; await new Promise(r => img.onload = r); 
-            let canvas = document.createElement("canvas"); 
-            let maxWidth = 400; 
-            let scale = maxWidth / img.width; 
-            canvas.width = maxWidth; 
-            canvas.height = img.height * scale; 
-            let ctx = canvas.getContext("2d"); 
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height); 
-            foto = canvas.toDataURL("image/jpeg", 0.4); 
-        }
-        
-        let data = { 
-            nama, perusahaan, kategori, tujuan, pic, dept, startDate, expDate, 
-            foto, sessions:[], currentStatus:"OUT", updatedAt: Date.now(), 
-            version: 1, deviceId, site: SITE_ID 
-        };
-        
-        let siteKey = SITE_ID + "_" + reg; 
-        visitors[siteKey] = data; 
-        addLog(reg, "REGISTER"); 
-        
-        await vmsSendToSheet("register", { 
-            reg, name: nama, company: perusahaan, purpose: tujuan, pic, 
-            start: startDate, exp: expDate, site: SITE_ID, deviceId 
-        });
-        
-        toast(`✅ ${nama} (${reg}) - Server-signed QR ready`, "success");
-        showPreview(reg, data);
-        
-        document.getElementById('regName').value = ""; 
-        document.getElementById('regCompany').value = ""; 
-        document.getElementById('regPic').value = ""; 
-        document.getElementById('regDept').value = ""; 
-        document.getElementById('regPhotoFile').value = ""; 
-        document.getElementById('previewPhotoThumb').src = ""; 
-        renderDashboard(); renderLogTable(); window.secureSave();
+        let reg = generateReg(); let foto = ""; let file = document.getElementById('regPhotoFile').files[0];
+        if(file){ let reader = await new Promise(r=>{let fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(file);}); let img = new Image(); img.src = reader; await new Promise(r => img.onload = r); let canvas = document.createElement("canvas"); let maxWidth = 400; let scale = maxWidth / img.width; canvas.width = maxWidth; canvas.height = img.height * scale; let ctx = canvas.getContext("2d"); ctx.drawImage(img, 0, 0, canvas.width, canvas.height); foto = canvas.toDataURL("image/jpeg", 0.4); }
+        let data = { nama, perusahaan, kategori, tujuan, pic, dept, startDate, expDate, foto, sessions:[], currentStatus:"OUT", updatedAt: Date.now(), version: 1, deviceId, site: SITE_ID };
+        let siteKey = SITE_ID + "_" + reg; visitors[siteKey] = data; addLog(reg, "REGISTER"); 
+        await vmsSendToSheet("register", { reg, name: nama, company: perusahaan, purpose: tujuan, pic, start: startDate, exp: expDate, site: SITE_ID, deviceId });
+        toast(`✅ ${nama} (${reg}) - Server-signed QR ready`, "success"); showPreview(reg, data);
+        document.getElementById('regName').value = ""; document.getElementById('regCompany').value = ""; document.getElementById('regPic').value = ""; document.getElementById('regDept').value = ""; document.getElementById('regPhotoFile').value = ""; document.getElementById('previewPhotoThumb').src = ""; renderDashboard(); renderLogTable(); window.secureSave();
     };
-    
     document.getElementById('walkinBtn').onclick = async () => {
-        let reg = generateReg(); 
-        let now = new Date(); 
-        let exp = new Date(now); exp.setDate(exp.getDate()+1);
-        let walkData = { 
-            nama: `WALK-IN ${now.toLocaleString()}`, perusahaan: "Guest", kategori: "UMUM", 
-            tujuan: "Visit", pic: "Reception", dept: "Umum", 
-            startDate: now.toISOString().slice(0,10), expDate: exp.toISOString().slice(0,10), 
-            foto: "", sessions:[], currentStatus:"OUT", updatedAt: Date.now(), 
-            version: 1, deviceId, site: SITE_ID 
-        };
-        let siteKey = SITE_ID + "_" + reg; 
-        visitors[siteKey] = walkData; 
-        addLog(reg, "WALK-IN");
-        await vmsSendToSheet("walkin", { 
-            reg, name: walkData.nama, company: walkData.perusahaan, purpose: walkData.tujuan, 
-            pic: walkData.pic, start: walkData.startDate, exp: walkData.expDate, 
-            site: SITE_ID, deviceId 
-        });
-        toast(`Walk-in ${reg} - Server-signed QR ready`,"success");
-        showPreview(reg, walkData); 
-        renderDashboard(); renderLogTable(); window.secureSave();
+        let reg = generateReg(); let now = new Date(); let exp = new Date(now); exp.setDate(exp.getDate()+1);
+        let walkData = { nama: `WALK-IN ${now.toLocaleString()}`, perusahaan: "Guest", kategori: "UMUM", tujuan: "Visit", pic: "Reception", dept: "Umum", startDate: now.toISOString().slice(0,10), expDate: exp.toISOString().slice(0,10), foto: "", sessions:[], currentStatus:"OUT", updatedAt: Date.now(), version: 1, deviceId, site: SITE_ID };
+        let siteKey = SITE_ID + "_" + reg; visitors[siteKey] = walkData; addLog(reg, "WALK-IN");
+        await vmsSendToSheet("walkin", { reg, name: walkData.nama, company: walkData.perusahaan, purpose: walkData.tujuan, pic: walkData.pic, start: walkData.startDate, exp: walkData.expDate, site: SITE_ID, deviceId });
+        toast(`Walk-in ${reg} - Server-signed QR ready`,"success"); showPreview(reg, walkData); renderDashboard(); renderLogTable(); window.secureSave();
     };
-    
-    document.getElementById('startCamBtn').onclick = async () => { 
-        document.getElementById('cameraPreview').innerHTML = ''; 
-        await stopScanner(); 
-        if(scannerInstance) try{ await scannerInstance.clear(); }catch(e){} 
-        scannerInstance = null; 
-        await startScanner(); 
-    };
-    
-    document.getElementById('stopCamBtn').onclick = async () => { 
-        await stopScanner(); 
-        if(scannerInstance) try{ await scannerInstance.clear(); }catch(e){} 
-        scannerInstance = null; 
-        toast("Camera stopped", "info"); 
-    };
-    
+    document.getElementById('startCamBtn').onclick = async () => { document.getElementById('cameraPreview').innerHTML = ''; await stopScanner(); if(scannerInstance) try{ await scannerInstance.clear(); }catch(e){} scannerInstance = null; await startScanner(); };
+    document.getElementById('stopCamBtn').onclick = async () => { await stopScanner(); if(scannerInstance) try{ await scannerInstance.clear(); }catch(e){} scannerInstance = null; toast("Camera stopped", "info"); };
     document.getElementById('uploadQrBtn').onclick = () => document.getElementById('uploadQrFile').click();
-    document.getElementById('uploadQrFile').onchange = async (e) => { 
-        let file = e.target.files[0]; 
-        if(!file) return; 
-        try { 
-            const url = URL.createObjectURL(file); 
-            const img = new Image(); 
-            img.src = url; 
-            await img.decode(); 
-            URL.revokeObjectURL(url); 
-            const canvas = document.createElement('canvas'); 
-            canvas.width = img.width; 
-            canvas.height = img.height; 
-            canvas.getContext('2d').drawImage(img, 0, 0); 
-            const scanner = new Html5Qrcode("temp-reader"); 
-            const decoded = await scanner.scanImage(canvas, { qrbox: { width: img.width, height: img.height } }); 
-            const mode = document.getElementById('scanMode').value;
-            await processSecureScan(decoded, mode); 
-            await scanner.clear(); 
-            document.getElementById("temp-reader").innerHTML = ""; 
-        } catch(err){ toast("QR read failed", "error"); } 
-    };
-    
-    document.getElementById('manualProcess').onclick = async () => { 
-        if(isManualProcessing){ toast("Processing","warning"); return; } 
-        isManualProcessing = true; 
-        try { 
-            let reg = document.getElementById('manualReg').value.trim(); 
-            let mode = document.getElementById('scanMode').value; 
-            let siteKey = SITE_ID + "_" + reg; 
-            let visitor = visitors[siteKey]; 
-            if(!visitor){ toast("REG not found","error"); return; } 
-            let exp = new Date(visitor.expDate); exp.setHours(23,59,59,999); 
-            if(exp < new Date()){ toast("Visitor expired","error"); return; } 
-            
-            // Anti double IN
-            if (mode === "CHECK_IN") {
-                const hasOpenSession = visitor.sessions?.some(s => !s.checkOut);
-                if (hasOpenSession) {
-                    toast("Already checked IN!", "warning");
-                    return;
-                }
-            }
-            
-            let actionTime = Date.now();
-            if(mode === "CHECK_IN"){ 
-                if(!visitor.sessions) visitor.sessions = []; 
-                visitor.sessions.push({ checkIn: actionTime, checkOut: null }); 
-                visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: actionTime }; 
-                addLog(reg, "CHECK_IN"); 
-                addSession(reg, actionTime, null);
-                await vmsSendToSheet("checkin", { reg, checkinTime: actionTime, site: SITE_ID, deviceId }); 
-                toast(`Check-in ${visitor.nama} success`,"success"); 
-            } else { 
-                if(!visitor.sessions) visitor.sessions = []; 
-                let openSession = null; 
-                for(let i = visitor.sessions.length - 1; i >= 0; i--){ 
-                    if(!visitor.sessions[i].checkOut){ openSession = visitor.sessions[i]; break; } 
-                } 
-                if(!openSession){ toast("No active session","warning"); visitor.sessions.push({ checkIn: actionTime, checkOut: actionTime }); } 
-                else { 
-                    openSession.checkOut = actionTime; 
-                    addSession(reg, openSession.checkIn, actionTime);
-                } 
-                visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: actionTime }; 
-                addLog(reg, "CHECK_OUT"); 
-                await vmsSendToSheet("checkout", { reg, checkoutTime: actionTime, site: SITE_ID, deviceId }); 
-                toast(`Check-out ${visitor.nama} success`,"success"); 
-            } 
-            renderDashboard(); renderLogTable(); window.secureSave(); 
-            safeManualSync(); 
-        } finally { isManualProcessing = false; } 
-    };
-    
+    document.getElementById('uploadQrFile').onchange = async (e) => { let file = e.target.files[0]; if(!file) return; try { const url = URL.createObjectURL(file); const img = new Image(); img.src = url; await img.decode(); URL.revokeObjectURL(url); const canvas = document.createElement('canvas'); canvas.width = img.width; canvas.height = img.height; canvas.getContext('2d').drawImage(img, 0, 0); const scanner = new Html5Qrcode("temp-reader"); const decoded = await scanner.scanImage(canvas, { qrbox: { width: img.width, height: img.height } }); const mode = document.getElementById('scanMode').value; await processSecureScan(decoded, mode); await scanner.clear(); document.getElementById("temp-reader").innerHTML = ""; } catch(err){ toast("QR read failed", "error"); } };
+    document.getElementById('manualProcess').onclick = async () => { if(isManualProcessing){ toast("Processing","warning"); return; } isManualProcessing = true; try { let reg = document.getElementById('manualReg').value.trim(); let mode = document.getElementById('scanMode').value; let siteKey = SITE_ID + "_" + reg; let visitor = visitors[siteKey]; if(!visitor){ toast("REG not found","error"); return; } let exp = new Date(visitor.expDate); exp.setHours(23,59,59,999); if(exp < new Date()){ toast("Visitor expired","error"); return; } if (mode === "CHECK_IN") { const hasOpenSession = visitor.sessions?.some(s => !s.checkOut); if (hasOpenSession) { toast("Already checked IN!", "warning"); return; } } let actionTime = Date.now(); if(mode === "CHECK_IN"){ if(!visitor.sessions) visitor.sessions = []; visitor.sessions.push({ checkIn: actionTime, checkOut: null }); visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: actionTime }; addLog(reg, "CHECK_IN"); addSession(reg, actionTime, null); await vmsSendToSheet("checkin", { reg, checkinTime: actionTime, site: SITE_ID, deviceId }); toast(`Check-in ${visitor.nama} success`,"success"); } else { if(!visitor.sessions) visitor.sessions = []; let openSession = null; for(let i = visitor.sessions.length - 1; i >= 0; i--){ if(!visitor.sessions[i].checkOut){ openSession = visitor.sessions[i]; break; } } if(!openSession){ toast("No active session","warning"); visitor.sessions.push({ checkIn: actionTime, checkOut: actionTime }); } else { openSession.checkOut = actionTime; addSession(reg, openSession.checkIn, actionTime); } visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: actionTime }; addLog(reg, "CHECK_OUT"); await vmsSendToSheet("checkout", { reg, checkoutTime: actionTime, site: SITE_ID, deviceId }); toast(`Check-out ${visitor.nama} success`,"success"); } renderDashboard(); renderLogTable(); window.secureSave(); safeManualSync(); } finally { isManualProcessing = false; } };
     document.getElementById('refreshLogsBtn').onclick = () => { safeManualSync(); renderLogTable(); };
     document.getElementById('selectAllBtn').onclick = () => document.querySelectorAll('.logCheckItem').forEach(c=>c.checked=true);
     document.getElementById('deselectAllBtn').onclick = () => document.querySelectorAll('.logCheckItem').forEach(c=>c.checked=false);
-    document.getElementById('deleteSelectedBtn').onclick = () => { 
-        let regs = [...new Set([...document.querySelectorAll('.logCheckItem:checked')].map(c=>c.dataset.reg))]; 
-        regs.forEach(r=>{ delete visitors[SITE_ID + "_" + r]; }); 
-        logs = logs.filter(l=>!regs.includes(l.reg)); 
-        window.secureSave(); 
-        renderDashboard(); 
-        renderLogTable(); 
-        toast(`Deleted ${regs.length} records`,"success"); 
-    };
+    document.getElementById('deleteSelectedBtn').onclick = () => { let regs = [...new Set([...document.querySelectorAll('.logCheckItem:checked')].map(c=>c.dataset.reg))]; regs.forEach(r=>{ delete visitors[SITE_ID + "_" + r]; }); logs = logs.filter(l=>!regs.includes(l.reg)); window.secureSave(); renderDashboard(); renderLogTable(); toast(`Deleted ${regs.length} records`,"success"); };
     document.getElementById('deleteAllBtn').onclick = () => { visitors = {}; logs = []; window.secureSave(); renderDashboard(); renderLogTable(); toast("All cleared","info"); };
-    document.getElementById('backupAction').onclick = () => { 
-        try { 
-            let a = document.createElement('a'); 
-            a.href = URL.createObjectURL(new Blob([JSON.stringify({visitors,logs})],{type:"application/json"})); 
-            a.download = `vms_backup_${Date.now()}.json`; 
-            a.click(); 
-            toast("Backup ready","success"); 
-        } catch(e) { toast("Backup failed", "error"); } 
-    };
+    document.getElementById('backupAction').onclick = () => { try { let a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify({visitors,logs})],{type:"application/json"})); a.download = `vms_backup_${Date.now()}.json`; a.click(); toast("Backup ready","success"); } catch(e) { toast("Backup failed", "error"); } };
     document.getElementById('resetDatabaseAction').onclick = () => { visitors = {}; logs = []; window.secureSave(); renderDashboard(); renderLogTable(); toast("DB reset","info"); };
-    document.getElementById('regPhotoFile').onchange = (e) => { 
-        if(e.target.files[0]){ 
-            let r=new FileReader(); 
-            r.onload=ev=>document.getElementById('previewPhotoThumb').src=ev.target.result; 
-            r.readAsDataURL(e.target.files[0]); 
-        } 
-    };
-    document.getElementById('submitLicenseBtn').onclick = () => { 
-        let input = document.getElementById("licenseInput"); 
-        if(input && input.value) { toast("✅ SECURE ELITE License activated", "success"); } 
-        input.value = ""; 
-    };
+    document.getElementById('regPhotoFile').onchange = (e) => { if(e.target.files[0]){ let r=new FileReader(); r.onload=ev=>document.getElementById('previewPhotoThumb').src=ev.target.result; r.readAsDataURL(e.target.files[0]); } };
+    document.getElementById('submitLicenseBtn').onclick = () => { let input = document.getElementById("licenseInput"); if(input && input.value) { toast("✅ SECURE ELITE License activated", "success"); } input.value = ""; };
     document.getElementById('siteSelector').onchange = (e) => setSite(e.target.value);
     document.getElementById('siteSelectorTop').onchange = (e) => setSite(e.target.value);
     
     function exportToExcelWithFormat() {
-        try { 
-            if (!window.XLSX) { toast("Excel engine error", "error"); return; }
-            const dataForExcel = [];
-            Object.entries(visitors).forEach(([siteKey, visitor]) => {
-                if (!siteKey.startsWith(SITE_ID + "_")) return;
-                const reg = siteKey.replace(SITE_ID + "_", "");
-                let jamMasuk = "-", jamKeluar = "-", durasi = "-", keterangan = "";
-                if (visitor.sessions?.length) {
-                    const last = visitor.sessions[visitor.sessions.length-1];
-                    if (last.checkIn) jamMasuk = new Date(last.checkIn).toLocaleString('id-ID');
-                    if (last.checkOut) jamKeluar = new Date(last.checkOut).toLocaleString('id-ID');
-                    if (last.checkIn && last.checkOut) durasi = Math.floor((last.checkOut - last.checkIn)/60000)+" menit";
-                    keterangan = visitor.currentStatus === "IN" ? "Inside" : (last.checkOut ? "Checked-out" : "Pending");
-                } else keterangan = "No session";
-                if (visitor.expDate && new Date(visitor.expDate) < new Date()) keterangan = "EXPIRED";
-                dataForExcel.push({ 
-                    "Nama": visitor.nama||"-", "Perusahaan": visitor.perusahaan||"-", "Tujuan": visitor.tujuan||"-", 
-                    "PIC": visitor.pic||"-", "Start": visitor.startDate||"-", "Expired": visitor.expDate||"-", 
-                    "Check-In": jamMasuk, "Check-Out": jamKeluar, "Durasi": durasi, "REG": reg, "Status": keterangan 
-                });
-            });
-            if (!dataForExcel.length) { toast("No data", "warning"); return; }
-            const ws = XLSX.utils.json_to_sheet(dataForExcel); 
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, "VMS_Secure_Report");
-            XLSX.writeFile(wb, `VMS_Secure_Report_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
-            toast("✅ Export success", "success");
+        try { if (!window.XLSX) { toast("Excel engine error", "error"); return; }
+            const dataForExcel = []; Object.entries(visitors).forEach(([siteKey, visitor]) => { if (!siteKey.startsWith(SITE_ID + "_")) return; const reg = siteKey.replace(SITE_ID + "_", ""); let jamMasuk = "-", jamKeluar = "-", durasi = "-", keterangan = ""; if (visitor.sessions?.length) { const last = visitor.sessions[visitor.sessions.length-1]; if (last.checkIn) jamMasuk = new Date(last.checkIn).toLocaleString('id-ID'); if (last.checkOut) jamKeluar = new Date(last.checkOut).toLocaleString('id-ID'); if (last.checkIn && last.checkOut) durasi = Math.floor((last.checkOut - last.checkIn)/60000)+" menit"; keterangan = visitor.currentStatus === "IN" ? "Inside" : (last.checkOut ? "Checked-out" : "Pending"); } else keterangan = "No session"; if (visitor.expDate && new Date(visitor.expDate) < new Date()) keterangan = "EXPIRED"; dataForExcel.push({ "Nama": visitor.nama||"-", "Perusahaan": visitor.perusahaan||"-", "Tujuan": visitor.tujuan||"-", "PIC": visitor.pic||"-", "Start": visitor.startDate||"-", "Expired": visitor.expDate||"-", "Check-In": jamMasuk, "Check-Out": jamKeluar, "Durasi": durasi, "REG": reg, "Status": keterangan }); });
+            if (!dataForExcel.length) { toast("No data", "warning"); return; } const ws = XLSX.utils.json_to_sheet(dataForExcel); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "VMS_Secure_Report"); XLSX.writeFile(wb, `VMS_Secure_Report_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`); toast("✅ Export success", "success");
         } catch(err) { toast("Export failed", "error"); }
     }
     document.getElementById('exportExcelAction').onclick = exportToExcelWithFormat;
-    
     const panes = { dashboard: document.getElementById('dashboardPane'), register: document.getElementById('registerPane'), scanner: document.getElementById('scannerPane'), logs: document.getElementById('logsPane') };
     function switchTab(tabId){ Object.values(panes).forEach(p=>p.classList.remove('active-pane')); if(panes[tabId]) panes[tabId].classList.add('active-pane'); document.querySelectorAll('.nav-item').forEach(nav=>{ if(nav.dataset.tab === tabId) nav.classList.add('active'); else nav.classList.remove('active'); }); }
     document.querySelectorAll('.nav-item, .mobile-nav').forEach(el=>{ if(el.dataset?.tab) el.addEventListener('click',()=>{ switchTab(el.dataset.tab); if(window.innerWidth<=780) document.getElementById('mobileSidebar').classList.remove('open'); document.getElementById('overlay').style.display='none'; }); });
     document.getElementById('mobileMenuBtn').onclick = () => { document.getElementById('mobileSidebar').classList.add('open'); document.getElementById('overlay').style.display='block'; };
     document.getElementById('overlay').onclick = () => { document.getElementById('mobileSidebar').classList.remove('open'); document.getElementById('overlay').style.display='none'; };
     
-    window.renderLogTable = renderLogTable; 
-    window.renderDashboard = renderDashboard; 
-    window.vmsSendToSheet = vmsSendToSheet; 
-    window.visitors = visitors; 
-    window.logs = logs;
-    
-    secureLoad(); 
-    setSite(SITE_ID); 
-    renderDashboard(); 
-    renderLogTable(); 
-    initQueue();
+    window.renderLogTable = renderLogTable; window.renderDashboard = renderDashboard; window.vmsSendToSheet = vmsSendToSheet; window.visitors = visitors; window.logs = logs;
+    secureLoad(); setSite(SITE_ID); renderDashboard(); renderLogTable(); initQueue();
     setInterval(() => { if (navigator.onLine) vmsPullRealtime(); }, SYNC_INTERVAL_MS);
     window.addEventListener("beforeunload", () => { if(scannerInstance) { try { scannerInstance.stop(); scannerInstance.clear(); } catch(e){} } window.secureSave(); });
 })();
 
-// SITE RENAME
 let vmsSiteData = { names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" } };
 function vmsSite_load() { try { const stored = localStorage.getItem("vms_site_names"); if (stored) Object.assign(vmsSiteData.names, JSON.parse(stored)); } catch(e) {} vmsSite_applyToUI(); }
-function vmsSite_applyToUI() { 
-    document.querySelectorAll("[data-site]").forEach(el => { const k = el.getAttribute("data-site"); if(vmsSiteData.names[k]) el.innerText = vmsSiteData.names[k]; });
-    document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => { Array.from(sel.options).forEach(opt => { const val = opt.value; if(vmsSiteData.names[val]) { const icon = opt.textContent.substring(0,2); const hasIcon = icon === "🏭" || icon === "🏢" || icon === "🏬"; opt.textContent = (hasIcon ? icon+" " : "") + vmsSiteData.names[val]; } }); });
-}
+function vmsSite_applyToUI() { document.querySelectorAll("[data-site]").forEach(el => { const k = el.getAttribute("data-site"); if(vmsSiteData.names[k]) el.innerText = vmsSiteData.names[k]; }); document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => { Array.from(sel.options).forEach(opt => { const val = opt.value; if(vmsSiteData.names[val]) { const icon = opt.textContent.substring(0,2); const hasIcon = icon === "🏭" || icon === "🏢" || icon === "🏬"; opt.textContent = (hasIcon ? icon+" " : "") + vmsSiteData.names[val]; } }); }); }
 function vmsSite_save() { localStorage.setItem("vms_site_names", JSON.stringify(vmsSiteData.names)); return true; }
 function vmsSite_open() { const modal = document.getElementById("vmsSiteModal"); if(modal) { modal.style.display = "flex"; document.getElementById("vmsA").value = vmsSiteData.names.SITE_A || "SITE A"; document.getElementById("vmsB").value = vmsSiteData.names.SITE_B || "SITE B"; document.getElementById("vmsC").value = vmsSiteData.names.SITE_C || "SITE C"; } }
 function vmsSite_close() { document.getElementById("vmsSiteModal").style.display = "none"; }
