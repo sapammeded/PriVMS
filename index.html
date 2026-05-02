@@ -86,7 +86,7 @@
 
 <script>
 // ==================== FIELD READY VMS v6.0 ====================
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzS5FMsggrsneDPlu2wBDTNyDhlaJwug4xa09c1GGcmbeanhgAdMa1RNx0JLSh-5h3v/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzd_yZGE3mVuqUvqp32_tkzFY3uaIzSe35IHckVvlvcHgyfkPciCsDldbLjZe93HT0h/exec";
 const SYNC_INTERVAL_MS = 10000;
 
 let visitors = {};
@@ -171,19 +171,39 @@ async function apiCall(params) {
     }
 }
 
+// 🔥 FIX: tambah photo parameter
 async function registerVisitor(reg, data) {
     return await apiCall({
-        action: "register", reg, name: data.nama, company: data.perusahaan,
-        purpose: data.tujuan, pic: data.pic, start: data.startDate, exp: data.expDate,
-        category: data.kategori, dept: data.dept, site: SITE_ID
+        action: "register",
+        reg,
+        name: data.nama,
+        company: data.perusahaan,
+        purpose: data.tujuan,
+        pic: data.pic,
+        start: data.startDate,
+        exp: data.expDate,
+        category: data.kategori,
+        dept: data.dept,
+        site: SITE_ID,
+        photo: data.foto || ""
     });
 }
 
+// 🔥 FIX: tambah photo parameter untuk walkin
 async function walkinVisitor(reg, data) {
     return await apiCall({
-        action: "walkin", reg, name: data.nama, company: data.perusahaan,
-        purpose: data.tujuan, pic: data.pic, start: data.startDate, exp: data.expDate,
-        category: data.kategori, dept: data.dept, site: SITE_ID
+        action: "walkin",
+        reg,
+        name: data.nama,
+        company: data.perusahaan,
+        purpose: data.tujuan,
+        pic: data.pic,
+        start: data.startDate,
+        exp: data.expDate,
+        category: data.kategori,
+        dept: data.dept,
+        site: SITE_ID,
+        photo: data.foto || ""
     });
 }
 
@@ -350,7 +370,6 @@ function renderLogTable() {
 }
 
 // ==================== QR & SCANNER ====================
-// ELITE FIX: Fast decode - jika QR berisi REG langsung, tanpa API call
 async function processScan(qrText) {
     if (!qrText || typeof qrText !== "string") return false;
     qrText = qrText.trim();
@@ -359,11 +378,9 @@ async function processScan(qrText) {
     let reg = null;
     let visitorData = {};
     
-    // ELITE FIX: Langsung ambil REG jika formatnya REGxxx
     if (qrText.startsWith("REG")) {
         reg = qrText;
     } else {
-        // Fallback ke API untuk QR lama
         let validation = await validateQRCode(qrText);
         if (validation.status !== "success") {
             toast("QR tidak valid!", "error");
@@ -493,6 +510,7 @@ function showPreviewWithQR(reg, data, qrImage) {
     modal.querySelector("#previewCloseBtn").onclick = () => modal.remove();
 }
 
+// 🔥 FIX: tambah photo support di PDF
 async function downloadPDF(reg, data) {
     try {
         await ensureJSPDF();
@@ -519,6 +537,13 @@ async function downloadPDF(reg, data) {
         doc.text(`Start Date : ${data.startDate || "-"}`, 20, y); y += 8;
         doc.text(`Expired Date : ${data.expDate || "-"}`, 20, y); y += 8;
         doc.text(`Status : ${data.currentStatus === "IN" ? "IN (Inside Area)" : "OUT"}`, 20, y);
+        
+        // 🔥 TAMBAH FOTO (posisi setelah QR atau di area terpisah)
+        if (data.foto && data.foto.startsWith("data:image")) {
+            try {
+                doc.addImage(data.foto, "JPEG", 140, 130, 40, 40);
+            } catch (e) { console.warn("Photo PDF error:", e); }
+        }
         
         let qrData = data._qrData;
         if (!qrData) {
@@ -597,7 +622,6 @@ async function startScanner() {
         isScanning = true;
         toast("Scanner siap", "success");
         
-        // ANTI FREEZE: Reset scanner every 60 seconds on Android
         if (cameraResetInterval) clearInterval(cameraResetInterval);
         cameraResetInterval = setTimeout(async () => {
             if (isScanning) {
@@ -896,7 +920,6 @@ setSite(SITE_ID);
 renderDashboard();
 renderLogTable();
 
-// HANYA SATU KALI INIT QUEUE (Fix bug double init)
 function initQueue() {
     try { const saved = localStorage.getItem("vms_sync_queue"); if (saved) syncQueue = JSON.parse(saved); updateQueueStatus(); } catch (e) {}
 }
