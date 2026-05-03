@@ -135,7 +135,7 @@ var vmsSiteData = {
   names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" }
 };
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw2o3M3i4spZ0OvDomStI63SFAVOWw2T41r9aXYltk6nTIRoa1ICeKs1-1KZV3KLgRZ/exec";  
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfyJdAl6aLC35vLN1ES9QA19Kx8rlVXx0Yc9pBNFLKkixEmYF4gSVO50yhoZkdTvPeMw/exec";  
 const SYNC_INTERVAL_MS = 10000;  
 
 let visitors = {};  
@@ -265,6 +265,7 @@ async function apiCall(params) {
             sign,
             ua: navigator.userAgent
         });
+console.log("SEND DATA:", Object.fromEntries(formData));
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
