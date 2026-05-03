@@ -85,8 +85,20 @@
 <div id="vmsSiteModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:10001;"><div style="background:white; border-radius:28px; padding:28px; width:420px; max-width:90%;"><h3>⚙️ Edit Site Names</h3><div style="margin-bottom:16px;"><label>🏭 SITE A</label><input type="text" id="vmsA" style="width:100%; padding:12px; margin-top:5px; border-radius:16px; border:1px solid #ccc;"></div><div style="margin-bottom:16px;"><label>🏢 SITE B</label><input type="text" id="vmsB" style="width:100%; padding:12px; margin-top:5px; border-radius:16px; border:1px solid #ccc;"></div><div style="margin-bottom:16px;"><label>🏬 SITE C</label><input type="text" id="vmsC" style="width:100%; padding:12px; margin-top:5px; border-radius:16px; border:1px solid #ccc;"></div><div style="display:flex; gap:12px;"><button id="vmsSaveBtn" onclick="vmsSite_submit()" style="background:#1f4e4a;">💾 Save</button><button onclick="vmsSite_close()" class="btn-outline">Cancel</button></div></div></div>
 
 <script>
+// ==================== INIT DEFAULT SITE NAMES ====================
+(function initSiteNameDefault() {
+    let saved = localStorage.getItem("vms_site_names");
+    if (!saved) {
+        localStorage.setItem("vms_site_names", JSON.stringify({
+            SITE_A: "SITE A",
+            SITE_B: "SITE B",
+            SITE_C: "SITE C"
+        }));
+    }
+})();
+
 // ==================== ENTERPRISE VMS - HARDENED PRODUCTION ====================
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzd_yZGE3mVuqUvqp32_tkzFY3uaIzSe35IHckVvlvcHgyfkPciCsDldbLjZe93HT0h/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7QEOMl-At9XTcLag3Tv1vgM2UZqUltfRlTPlWbL8WC04vEevYXcMM4T630fLEtBz4/exec";
 const SYNC_INTERVAL_MS = 10000;
 
 let visitors = {};
@@ -102,37 +114,22 @@ let isScanning = false;
 let currentCameraId = null;
 let cameraResetInterval = null;
 
-// Index cache dengan validasi
-let rowIndexCache = {};
-
-function setIndex(reg, rowNum) {
-    rowIndexCache[reg] = rowNum;
-    try {
-        let cache = JSON.parse(localStorage.getItem("vms_row_index") || "{}");
-        cache[reg] = rowNum;
-        localStorage.setItem("vms_row_index", JSON.stringify(cache));
-    } catch(e) {}
-}
-
-function getIndex(reg) {
-    if (rowIndexCache[reg]) return rowIndexCache[reg];
-    try {
-        let cache = JSON.parse(localStorage.getItem("vms_row_index") || "{}");
-        if (cache[reg]) {
-            rowIndexCache[reg] = cache[reg];
-            return cache[reg];
-        }
-    } catch(e) {}
-    return null;
-}
-
-// ==================== SITE NAME HELPER ====================
+// ==================== SITE NAME HELPER (HARD FALLBACK) ====================
 function getSiteName(siteId) {
     let names = {};
     try {
         names = JSON.parse(localStorage.getItem("vms_site_names") || "{}");
     } catch(e) {}
-    return names[siteId] || siteId;
+
+    let name = names[siteId];
+
+    if (!name || name.trim() === "" || name === "undefined") {
+        name = siteId.replace(/_/g, " ");
+        names[siteId] = name;
+        localStorage.setItem("vms_site_names", JSON.stringify(names));
+    }
+
+    return name;
 }
 
 // ==================== HELPER ====================
@@ -230,7 +227,7 @@ async function registerVisitor(reg, data) {
         exp: data.expDate,
         category: data.kategori,
         site_id: SITE_ID,
-        site_name: getSiteName(SITE_ID),
+        site_name: (getSiteName(SITE_ID) || SITE_ID.replace(/_/g," ")).trim(),
         photo: data.foto || ""
     });
 }
@@ -248,7 +245,7 @@ async function walkinVisitor(reg, data) {
         exp: data.expDate,
         category: data.kategori,
         site_id: SITE_ID,
-        site_name: getSiteName(SITE_ID),
+        site_name: (getSiteName(SITE_ID) || SITE_ID.replace(/_/g," ")).trim(),
         photo: data.foto || ""
     });
 }
@@ -267,13 +264,13 @@ async function pullFromSheet() {
     } catch (err) { console.error("Pull error:", err); }
 }
 
-// ==================== SYNC PARSING - FULL DATA STRUCTURE ====================
+// ==================== SYNC PARSING ====================
 function syncVisitorStatus(sheetData) {
     if (!Array.isArray(sheetData)) return;
     for (let i = 1; i < sheetData.length; i++) {
         const row = sheetData[i];
         const reg = row[9];
-        const siteId = row[13];
+        const siteId = row[14];
         if (!reg || siteId !== SITE_ID) continue;
         const sheetStatus = row[11] === "IN" ? "IN" : "OUT";
         const key = SITE_ID + "_" + reg;
@@ -288,7 +285,7 @@ function syncVisitorStatus(sheetData) {
                 dept: row[5] || "-",
                 startDate: row[6] || "",
                 expDate: row[7] || "",
-                foto: "",
+                foto: row[16] || "",
                 sessions: [],
                 currentStatus: sheetStatus,
                 updatedAt: Date.now()
@@ -298,13 +295,10 @@ function syncVisitorStatus(sheetData) {
                 visitors[key].currentStatus = sheetStatus;
                 visitors[key].updatedAt = Date.now();
             }
+            if (row[16] && !visitors[key].foto) {
+                visitors[key].foto = row[16];
+            }
         }
-        
-        if (row[15] && !visitors[key].foto) {
-            visitors[key].foto = row[15];
-        }
-        
-        if (row) setIndex(reg, i + 1);
     }
     secureSave();
     renderDashboard();
@@ -449,25 +443,25 @@ async function processScan(qrText) {
     let mode = document.getElementById("scanMode").value;
     let reg = null;
     
-    if (qrText.includes("|")) {
-    // QR dari sistem (pakai hash)
-    let validation = await validateQRCode(qrText);
-
-    if (validation.status !== "success" || !validation.data?.reg) {
+    if (qrText.startsWith("REG")) {
+        reg = qrText;
+    } else {
+        let validation = await validateQRCode(qrText);
+        if (validation.status !== "success") {
+            toast("QR tidak valid!", "error");
+            return false;
+        }
+        reg = validation.data?.reg;
+        if (!reg) {
+            toast("QR tidak valid!", "error");
+            return false;
+        }
+    }
+    
+    if (!reg) {
         toast("QR tidak valid!", "error");
         return false;
     }
-
-    reg = validation.data.reg;
-
-} else if (qrText.startsWith("REG")) {
-    // fallback manual / legacy
-    reg = qrText;
-
-} else {
-    toast("QR format tidak dikenal!", "error");
-    return false;
-}
     
     if (lastScanTime[reg] && Date.now() - lastScanTime[reg] < 1500) {
         toast("Scan terlalu cepat", "warning");
@@ -531,19 +525,44 @@ async function processScan(qrText) {
     }
 }
 
+// ==================== GENERATE QR WITH IMAGE (HARD FALLBACK) ====================
 async function generateQRandShow(reg, data) {
     let result = await generateQRCode(reg, data.nama, data.perusahaan, data.expDate);
-    if (result.status === "success") {
-        showPreviewWithQR(reg, data, null);
-    } else {
-        toast("Gagal generate QR", "error");
-        showPreviewWithQR(reg, data, null);
+
+    let qrData = reg;
+
+    if (result.status === "success" && result.data) {
+        qrData = result.data;
     }
+
+    // 🔥 HARD FALLBACK QR GENERATION
+    let qrImage;
+    try {
+        qrImage = await QRCode.toDataURL(qrData, { width: 200 });
+    } catch (e) {
+        console.error("QR FAIL:", e);
+        try {
+            qrImage = await QRCode.toDataURL(reg, { width: 200 });
+        } catch (e2) {
+            console.error("QR FALLBACK FAIL:", e2);
+            qrImage = null;
+        }
+    }
+
+    showPreviewWithQR(reg, data, qrImage);
 }
 
 function showPreviewWithQR(reg, data, qrImage) {
+    // 🔥 VALIDATOR sebelum PDF
+    if (!qrImage || !qrImage.startsWith("data:image")) {
+        toast("QR gagal dibuat, ulangi!", "error");
+        return;
+    }
+    
     let modal = document.createElement("div");
     modal.className = "modal-overlay";
+    
+    let qrHtml = `<img class="qr-preview" src="${qrImage}">`;
     modal.innerHTML = `
         <div class="modal-card">
             <h3>📄 Preview Invitation</h3>
@@ -556,6 +575,7 @@ function showPreviewWithQR(reg, data, qrImage) {
                 <p><strong>Validity</strong> : ${data.startDate} → ${data.expDate}</p>
                 <p><strong>REG</strong> : ${reg}</p>
             </div>
+            ${qrHtml}
             <div class="flex-btns">
                 <button id="previewDownloadBtn">Download PDF</button>
                 <button id="previewCloseBtn" class="btn-outline">Close</button>
@@ -564,17 +584,34 @@ function showPreviewWithQR(reg, data, qrImage) {
     `;
     document.body.appendChild(modal);
     setTimeout(() => modal.classList.add("active"), 10);
-    modal.querySelector("#previewDownloadBtn").onclick = async () => {
-        if (window.downloading) return;
-        window.downloading = true;
-        await downloadPDF(reg, data);
-        window.downloading = false;
-        modal.remove();
-    };
-    modal.querySelector("#previewCloseBtn").onclick = () => modal.remove();
+    
+    let downloadBtn = modal.querySelector("#previewDownloadBtn");
+    let closeBtn = modal.querySelector("#previewCloseBtn");
+    
+    if (downloadBtn) {
+        downloadBtn.onclick = async () => {
+            if (window.downloading) return;
+            window.downloading = true;
+            
+            // 🔥 Hard delay + validator sebelum PDF
+            if (!qrImage || !qrImage.startsWith("data:image")) {
+                toast("QR belum siap, tunggu...", "warning");
+                window.downloading = false;
+                return;
+            }
+            
+            await new Promise(r => setTimeout(r, 200));
+            
+            data.qrImage = qrImage;
+            await downloadPDF(reg, data);
+            window.downloading = false;
+            modal.remove();
+        };
+    }
+    if (closeBtn) closeBtn.onclick = () => modal.remove();
 }
 
-// ==================== PDF WITH PHOTO FIX ====================
+// ==================== PDF WITH QR & PHOTO ====================
 async function downloadPDF(reg, data) {
     try {
         await ensureJSPDF();
@@ -602,6 +639,14 @@ async function downloadPDF(reg, data) {
         doc.text(`Expired Date : ${data.expDate || "-"}`, 20, y); y += 8;
         doc.text(`Status : ${data.currentStatus === "IN" ? "IN (Inside Area)" : "OUT"}`, 20, y);
         
+        // QR CODE - dengan validasi
+        if (data.qrImage && data.qrImage.startsWith("data:image")) {
+            try {
+                doc.addImage(data.qrImage, "PNG", 140, 60, 40, 40);
+            } catch (e) { console.warn("QR PDF error:", e); }
+        }
+        
+        // PHOTO
         if (data.foto && data.foto.startsWith("data:image")) {
             try {
                 let fotoLower = data.foto.toLowerCase();
@@ -705,7 +750,13 @@ async function stopScanner() {
 function setSite(site) {
     SITE_ID = site;
     localStorage.setItem("vms_site", SITE_ID);
-    document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => { if (sel) sel.value = site; });
+    
+    document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => {
+        if (sel) sel.value = site;
+    });
+    
+    vmsSite_applyToUI();
+    
     toast(`Site aktif: ${getSiteName(SITE_ID)}`, "success");
     renderDashboard();
     renderLogTable();
@@ -1029,10 +1080,12 @@ function vmsSite_applyToUI() {
         if (!sel) return;
         Array.from(sel.options).forEach(opt => {
             let val = opt.value;
-            if (vmsSiteData.names[val]) {
+            let siteNames = {};
+            try { siteNames = JSON.parse(localStorage.getItem("vms_site_names") || "{}"); } catch(e) {}
+            if (siteNames[val]) {
                 let icon = opt.textContent.substring(0, 2);
                 let hasIcon = icon === "🏭" || icon === "🏢" || icon === "🏬";
-                opt.textContent = (hasIcon ? icon + " " : "") + vmsSiteData.names[val];
+                opt.textContent = (hasIcon ? icon + " " : "") + siteNames[val];
             }
         });
     });
@@ -1044,10 +1097,13 @@ function vmsSite_submit() {
     let vmsA = document.getElementById("vmsA");
     let vmsB = document.getElementById("vmsB");
     let vmsC = document.getElementById("vmsC");
-    if (vmsA) vmsSiteData.names.SITE_A = vmsA.value.trim() || "SITE A";
-    if (vmsB) vmsSiteData.names.SITE_B = vmsB.value.trim() || "SITE B";
-    if (vmsC) vmsSiteData.names.SITE_C = vmsC.value.trim() || "SITE C";
-    vmsSite_applyToUI(); vmsSite_save();
+    let newNames = { ...vmsSiteData.names };
+    if (vmsA) newNames.SITE_A = vmsA.value.trim() || "SITE A";
+    if (vmsB) newNames.SITE_B = vmsB.value.trim() || "SITE B";
+    if (vmsC) newNames.SITE_C = vmsC.value.trim() || "SITE C";
+    vmsSiteData.names = newNames;
+    localStorage.setItem("vms_site_names", JSON.stringify(vmsSiteData.names));
+    vmsSite_applyToUI();
     if (typeof toast === "function") toast("✅ Site names saved!", "success");
     vmsSite_close();
 }
