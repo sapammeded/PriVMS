@@ -131,6 +131,10 @@ async function sha256(str){
     }  
 })();  
 
+var vmsSiteData = {
+  names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" }
+};
+
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw2o3M3i4spZ0OvDomStI63SFAVOWw2T41r9aXYltk6nTIRoa1ICeKs1-1KZV3KLgRZ/exec";  
 const SYNC_INTERVAL_MS = 10000;  
 
@@ -987,8 +991,9 @@ document.getElementById("overlay").onclick = () => { let mobileSidebar = documen
 
 if (window._vmsIntervals) { window._vmsIntervals.forEach(clearInterval); }  
 window._vmsIntervals = [];  
-secureLoad();  
-setSite(SITE_ID);  
+secureLoad();
+vmsSite_load();   
+setSite(SITE_ID);
 renderDashboard();  
 renderLogTable();  
 function initQueue() { try { const saved = localStorage.getItem("vms_sync_queue"); if (saved) syncQueue = JSON.parse(saved); updateQueueStatus(); } catch (e) { console.error("initQueue error:", e); } }  
@@ -999,10 +1004,12 @@ let queueInterval = setInterval(() => { if (navigator.onLine && syncQueue.length
 window._vmsIntervals.push(syncInterval, queueInterval);  
 window.addEventListener("beforeunload", () => { if (scannerInstance) { try { scannerInstance.stop(); scannerInstance.clear(); } catch (e) { console.error("beforeunload scanner error:", e); } } if (cameraResetInterval) clearInterval(cameraResetInterval); window._vmsIntervals.forEach(clearInterval); secureSave(); });  
 
-let vmsSiteData = { names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" } };  
 function vmsSite_load() { try { let stored = localStorage.getItem("vms_site_names"); if (stored) Object.assign(vmsSiteData.names, JSON.parse(stored)); } catch(e) { console.error("vmsSite_load error:", e); } vmsSite_applyToUI(); }  
-function vmsSite_applyToUI() {  
-    document.querySelectorAll("[data-site]").forEach(el => { let k = el.getAttribute("data-site"); if (vmsSiteData.names[k]) el.innerText = vmsSiteData.names[k]; });  
+function vmsSite_applyToUI() {
+    if (!window.vmsSiteData || !vmsSiteData.names) {
+        console.warn("vmsSiteData belum siap (skip render)");
+        return;
+    }
     document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => { if (!sel) return; Array.from(sel.options).forEach(opt => { let val = opt.value; let siteNames = {}; try { siteNames = JSON.parse(localStorage.getItem("vms_site_names") || "{}"); } catch(e) { console.error("parse error:", e); } if (siteNames[val]) { let icon = opt.textContent.substring(0, 2); let hasIcon = icon === "🏭" || icon === "🏢" || icon === "🏬"; opt.textContent = (hasIcon ? icon + " " : "") + siteNames[val]; } }); });  
 }  
 function vmsSite_save() { localStorage.setItem("vms_site_names", JSON.stringify(vmsSiteData.names)); return true; }  
