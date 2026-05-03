@@ -2,15 +2,15 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>VMS SAPAM MEDED | Enterprise Elite System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+    <title>VMS SAPAM MEDED | Elite Production System</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { background: #f0f2f5; font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #1a2c3e; }
         :root { --primary: #1f4e4a; }
         .app-layout { display: flex; min-height: 100vh; }
@@ -18,10 +18,11 @@
         .logo-area { padding: 28px 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
         .logo-area h1 { font-size: 1.6rem; font-weight: 600; color: white; }
         .logo-area p { font-size: 0.7rem; color: #8ea5a5; margin-top: 6px; }
-        .nav-item { display: flex; align-items: center; gap: 14px; padding: 12px 24px; margin: 4px 12px; border-radius: 14px; color: #cbdcd9; font-weight: 500; cursor: pointer; }
+        .nav-item { display: flex; align-items: center; gap: 14px; padding: 12px 24px; margin: 4px 12px; border-radius: 14px; color: #cbdcd9; font-weight: 500; cursor: pointer; transition: 0.1s; }
         .nav-item.active { background: #2b5a55; color: white; }
+        .nav-item:active { opacity: 0.6; }
         .main-content { flex: 1; margin-left: 280px; padding: 24px 32px; width: calc(100% - 280px); }
-        .mobile-header { display: none; background: #0f2c2c; padding: 16px 20px; color: white; align-items: center; justify-content: space-between; }
+        .mobile-header { display: none; background: #0f2c2c; padding: 16px 20px; color: white; align-items: center; justify-content: space-between; position: sticky; top:0; z-index:100; }
         .menu-toggle { background: none; border: none; font-size: 1.8rem; color: white; cursor: pointer; }
         .mobile-sidebar { position: fixed; top: 0; left: -280px; width: 260px; height: 100%; background: #0f2c2c; z-index: 200; transition: 0.2s; padding-top: 20px; }
         .mobile-sidebar.open { left: 0; }
@@ -30,19 +31,20 @@
         .stat-card { background: white; border-radius: 24px; padding: 22px 20px; border: 1px solid #e2edf2; }
         .stat-card h4 { font-size: 0.7rem; text-transform: uppercase; color: #5f7f7c; margin-bottom: 12px; }
         .stat-number { font-size: 2.2rem; font-weight: 700; color: #1f4e4a; }
-        .form-card { background: white; border-radius: 28px; padding: 28px 30px; border: 1px solid #e7edf2; margin-bottom: 28px; }
+        .form-card { background: white; border-radius: 28px; padding: 28px 30px; margin-bottom: 28px; border: 1px solid #e7edf2; }
         .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px 32px; }
         .input-field { display: flex; flex-direction: column; gap: 6px; }
         .input-field label { font-size: 0.7rem; font-weight: 600; color: #2b5a55; text-transform: uppercase; }
         input, select { padding: 12px 14px; border-radius: 18px; border: 1px solid #d4e0e5; font-size: 0.9rem; }
-        button { background: #1f4e4a; border: none; padding: 10px 24px; border-radius: 40px; color: white; font-weight: 600; cursor: pointer; transition: 0.2s; }
-        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        button { background: #1f4e4a; border: none; padding: 12px 24px; border-radius: 40px; color: white; font-weight: 600; cursor: pointer; transition: 0.1s; min-height: 48px; }
+        button:active { opacity: 0.7; transform: scale(0.98); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-outline { background: white; border: 1px solid #cbd5e1; color: #1f4e4a; }
         .badge { display: inline-block; padding: 4px 12px; border-radius: 40px; font-size: 0.7rem; font-weight: 600; }
         .badge-VVIP { background: #fde68a; color: #92400e; }
         .badge-VIP { background: #e2e8f0; color: #334155; }
         .badge-UMUM { background: #d1fae5; color: #065f46; }
-        .toast-msg { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: white; padding: 10px 20px; border-radius: 40px; z-index: 1000; font-size: 0.8rem; animation: fadeIn 0.2s; }
+        .toast-msg { position: fixed; bottom: 24px; right: 24px; background: #1e293b; color: white; padding: 10px 20px; border-radius: 40px; z-index: 1000; font-size: 0.8rem; animation: fadeIn 0.2s; max-width: 90%; }
         .toast-msg.success { background: #1f4e4a; }
         .toast-msg.error { background: #b91c1c; }
         .toast-msg.warning { background: #d97706; }
@@ -52,8 +54,6 @@
         .modal-card { background: white; width: 480px; max-width: 90%; border-radius: 32px; padding: 28px; }
         .qr-preview { width: 120px; margin: 16px auto; display: block; }
         .flex-btns { display: flex; gap: 12px; margin-top: 20px; }
-        .loader { display: inline-block; width: 16px; height: 16px; border: 2px solid white; border-top: 2px solid transparent; border-radius: 50%; animation: spin 0.6s linear infinite; margin-left: 8px; vertical-align: middle; }
-        @keyframes spin { to { transform: rotate(360deg); } }
         .tab-pane { display: none; }
         .tab-pane.active-pane { display: block; animation: fade 0.2s; }
         @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
@@ -61,434 +61,464 @@
         table { width: 100%; border-collapse: collapse; }
         th { text-align: left; padding: 14px 16px; background: #f8fafc; color: #1f4e4a; border-bottom: 1px solid #e2e8f0; }
         td { padding: 12px 16px; border-bottom: 1px solid #edf2f7; }
-        #cameraPreview { width: 100%; max-width: 500px; background: #000; border-radius: 24px; overflow: hidden; min-height: 200px; }
+        #cameraPreview { width: 100%; max-width: 500px; background: #000; border-radius: 24px; overflow: hidden; min-height: 200px; margin: 0 auto; }
         @media (max-width: 780px) {
             .sidebar { display: none; }
             .mobile-header { display: flex; }
             .main-content { margin-left: 0; width: 100%; padding: 16px; }
             .grid-2 { grid-template-columns: 1fr; }
         }
-        .site-selector-wrap { margin-bottom: 20px; background: white; border-radius: 28px; padding: 8px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; border: 1px solid #e2edf2; }
-        .site-selector-wrap label { font-weight: 600; color: #2b5a55; font-size: 0.8rem; }
-        #siteSelector { width: auto; min-width: 140px; }
-        .license-badge { background: #fbbf24; color: #92400e; padding: 4px 12px; border-radius: 40px; font-size: 0.7rem; font-weight: 600; margin-left: 12px; }
         .queue-status { position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.8); color: #ff9800; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-family: monospace; pointer-events: none; }
-        .queue-status.has-queue { background: #ff9800; color: #000; }
+        .license-badge { background: #fbbf24; color: #92400e; padding: 4px 12px; border-radius: 40px; font-size: 0.7rem; font-weight: 600; margin-left: 12px; }
+        body.disable-interaction { pointer-events: none; opacity: 0.7; }
     </style>
 </head>
 <body>
 <div id="temp-reader" style="display:none;"></div>
 <div class="mobile-header"><button class="menu-toggle" id="mobileMenuBtn">☰</button><strong id="brandMobile" data-site="SITE_A">VMS ELITE</strong><div style="width: 28px;"></div></div>
 <div class="overlay" id="overlay"></div>
-<div class="mobile-sidebar" id="mobileSidebar"><div class="logo-area"><h1 id="brandSidebar" data-site="SITE_A">VMS</h1><p>Enterprise Elite</p></div><div class="nav-item mobile-nav" data-tab="dashboard">📊 Dashboard</div><div class="nav-item mobile-nav" data-tab="register">📝 Register</div><div class="nav-item mobile-nav" data-tab="scanner">📷 Scanner</div><div class="nav-item mobile-nav" data-tab="logs">📜 Logs</div></div>
-<div class="app-layout"><div class="sidebar"><div class="logo-area"><h1 id="brandSidebarMain" data-site="SITE_A">VMS</h1><p>Elite Enterprise</p></div><div class="nav-item active" data-tab="dashboard">📊 Dashboard</div><div class="nav-item" data-tab="register">📝 Register Visitor</div><div class="nav-item" data-tab="scanner">📷 Security Scan</div><div class="nav-item" data-tab="logs">📜 Audit Logs</div><div style="margin-top: 40px; padding: 20px; border-top: 1px solid rgba(255,255,255,0.1);"><div style="background:transparent; border:none; color:white; padding:0;"><label style="color:white;">🌍 Site</label><select id="siteSelector" style="background:#2b5a55; color:white;"><option value="SITE_A">🏭 SITE A</option><option value="SITE_B">🏢 SITE B</option><option value="SITE_C">🏬 SITE C</option></select><button id="vmsSiteEditBtn" onclick="vmsSite_open()" style="background:#2b5a55; margin-left:8px; padding:6px 12px;">⚙️ Rename</button></div></div></div><div class="main-content"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;"><div style="background:white; border-radius:28px; padding:8px 20px; display:flex; align-items:center; gap:16px;"><label>🌐 Active Site</label><select id="siteSelectorTop"><option value="SITE_A">🏭 SITE A</option><option value="SITE_B">🏢 SITE B</option><option value="SITE_C">🏬 SITE C</option></select><button onclick="vmsSite_open()" style="background:#0f2c2c; padding:6px 12px;">⚙️ Rename</button></div></div><div style="background:white; border-radius:20px; padding:16px; margin-bottom:16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;"><input type="text" id="licenseInput" placeholder="License key..." style="flex:1;"><button id="submitLicenseBtn">Aktivasi</button><div id="licenseStatusBadge" class="license-badge">ELITE</div></div><div id="dashboardPane" class="tab-pane active-pane"><div class="stats-row" id="statsWidget"></div><div class="form-card"><canvas id="trendChart" height="90"></canvas></div><div class="form-card"><canvas id="categoryChart" height="90"></canvas></div></div><div id="registerPane" class="tab-pane"><div class="form-card"><div class="grid-2"><div class="input-field"><label>Full name</label><input type="text" id="regName" placeholder="John Carter"></div><div class="input-field"><label>Company</label><input type="text" id="regCompany" placeholder="PT Nusantara"></div><div class="input-field"><label>Category</label><select id="regCategory"><option value="UMUM">UMUM</option><option value="VIP">VIP</option><option value="VVIP">VVIP</option></select></div><div class="input-field"><label>Purpose</label><select id="regPurpose"><option>Meeting</option><option>Interview</option><option>Service</option><option>Lainnya</option></select><input type="text" id="regCustomPurpose" placeholder="Other purpose" style="margin-top:8px;"></div><div class="input-field"><label>PIC</label><input type="text" id="regPic" placeholder="Budi Santoso"></div><div class="input-field"><label>Department</label><input type="text" id="regDept" placeholder="IT / HR"></div><div class="input-field"><label>Start date</label><input type="date" id="regStartDate"></div><div class="input-field"><label>Expired date</label><input type="date" id="regExpDate"></div><div class="input-field"><label>Photo</label><input type="file" id="regPhotoFile" accept="image/*"><img id="previewPhotoThumb" width="50" style="margin-top:8px; border-radius:12px;"></div></div><div style="display:flex; gap:16px; margin-top:24px;"><button id="walkinBtn">⚡ Walk-in</button><button id="generateQRBtn">🔐 Generate QR</button></div></div></div><div id="scannerPane" class="tab-pane"><div class="form-card"><div style="display:flex; gap:12px; margin-bottom:20px;"><select id="scanMode"><option value="CHECK_IN">CHECK-IN</option><option value="CHECK_OUT">CHECK-OUT</option></select><button id="startCamBtn">📷 Start Camera</button><button id="stopCamBtn" class="btn-outline">Stop</button><button id="uploadQrBtn">🖼️ Upload QR</button><input type="file" id="uploadQrFile" accept="image/*" style="display:none"></div><div id="cameraPreview"></div><div style="margin-top:24px;"><label>Manual REG Number</label><input type="text" id="manualReg" placeholder="REG2026xxxx"><button id="manualProcess" style="margin-top:8px;">Proses</button></div></div></div><div id="logsPane" class="tab-pane"><div class="form-card"><div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:24px;"><input type="text" id="searchLog" placeholder="Cari Nama / REG" style="width:200px;"><button id="refreshLogsBtn">Refresh</button><button id="selectAllBtn">Select all</button><button id="deselectAllBtn">Deselect</button><button id="deleteSelectedBtn" style="background:#b91c1c;">Hapus terpilih</button><button id="deleteAllBtn" style="background:#b91c1c;">Hapus semua</button><button id="exportExcelAction">Export Excel</button><button id="backupAction">Backup</button><button id="resetDatabaseAction" style="background:#92400e;">Reset DB</button></div><div class="table-wrap"><table id="logTable"><thead><tr><th><input type="checkbox" id="checkAllMaster"></th><th>REG</th><th>Nama</th><th>Perusahaan</th><th>Kategori</th><th>Aksi</th><th>Waktu</th><th>Site</th><th>PDF</th></tr></thead><tbody id="logTableBody"></tbody></table></div></div></div></div></div>
+<div class="mobile-sidebar" id="mobileSidebar"><div class="logo-area"><h1 id="brandSidebar" data-site="SITE_A">VMS</h1><p>Elite Enterprise</p></div><div class="nav-item mobile-nav" data-tab="dashboard">📊 Dashboard</div><div class="nav-item mobile-nav" data-tab="register">📝 Register</div><div class="nav-item mobile-nav" data-tab="scanner">📷 Scanner</div><div class="nav-item mobile-nav" data-tab="logs">📜 Logs</div></div>
+<div class="app-layout"><div class="sidebar"><div class="logo-area"><h1 id="brandSidebarMain" data-site="SITE_A">VMS</h1><p>Elite Enterprise</p></div><div class="nav-item active" data-tab="dashboard">📊 Dashboard</div><div class="nav-item" data-tab="register">📝 Register Visitor</div><div class="nav-item" data-tab="scanner">📷 Security Scan</div><div class="nav-item" data-tab="logs">📜 Audit Logs</div><div style="margin-top: 40px; padding: 20px; border-top: 1px solid rgba(255,255,255,0.1);"><div style="background:transparent; border:none; color:white; padding:0;"><label style="color:white;">🌍 Site</label><select id="siteSelector" style="background:#2b5a55; color:white;"><option value="SITE_A">🏭 SITE A</option><option value="SITE_B">🏢 SITE B</option><option value="SITE_C">🏬 SITE C</option></select><button id="vmsSiteEditBtn" onclick="vmsSite_open()" style="background:#2b5a55; margin-left:8px; padding:6px 12px;">⚙️ Rename</button></div></div></div><div class="main-content"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px;"><div style="background:white; border-radius:28px; padding:8px 20px; display:flex; align-items:center; gap:16px;"><label>🌐 Active Site</label><select id="siteSelectorTop"><option value="SITE_A">🏭 SITE A</option><option value="SITE_B">🏢 SITE B</option><option value="SITE_C">🏬 SITE C</option></select><button onclick="vmsSite_open()" style="background:#0f2c2c; padding:6px 12px;">⚙️ Rename</button></div></div><div style="background:white; border-radius:20px; padding:16px; margin-bottom:16px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;"><input type="text" id="licenseInput" placeholder="License key..." style="flex:1;"><button id="submitLicenseBtn">Aktivasi</button><div id="licenseStatusBadge" class="license-badge">ELITE</div></div><div id="dashboardPane" class="tab-pane active-pane"><div class="stats-row" id="statsWidget"></div><div class="form-card"><canvas id="trendChart" height="90"></canvas></div><div class="form-card"><canvas id="categoryChart" height="90"></canvas></div></div><div id="registerPane" class="tab-pane"><div class="form-card"><div class="grid-2"><div class="input-field"><label>Full name</label><input type="text" id="regName" placeholder="John Carter"></div><div class="input-field"><label>Company</label><input type="text" id="regCompany" placeholder="PT Nusantara"></div><div class="input-field"><label>Category</label><select id="regCategory"><option value="UMUM">UMUM</option><option value="VIP">VIP</option><option value="VVIP">VVIP</option></select></div><div class="input-field"><label>Purpose</label><select id="regPurpose"><option>Meeting</option><option>Interview</option><option>Service</option><option>Lainnya</option></select><input type="text" id="regCustomPurpose" placeholder="Other purpose" style="margin-top:8px;"></div><div class="input-field"><label>PIC</label><input type="text" id="regPic" placeholder="Budi Santoso"></div><div class="input-field"><label>Department</label><input type="text" id="regDept" placeholder="IT / HR"></div><div class="input-field"><label>Start date</label><input type="date" id="regStartDate"></div><div class="input-field"><label>Expired date</label><input type="date" id="regExpDate"></div><div class="input-field"><label>Photo</label><input type="file" id="regPhotoFile" accept="image/*"><img id="previewPhotoThumb" width="50" style="margin-top:8px; border-radius:12px;"></div></div><div style="display:flex; gap:16px; margin-top:24px;"><button id="walkinBtn">⚡ Walk-in</button><button id="generateQRBtn">🔐 Generate QR</button></div></div></div><div id="scannerPane" class="tab-pane"><div class="form-card"><div style="display:flex; gap:12px; margin-bottom:20px; flex-wrap:wrap;"><select id="scanMode"><option value="CHECK_IN">CHECK-IN</option><option value="CHECK_OUT">CHECK-OUT</option></select><button id="startCamBtn">📷 Start Camera</button><button id="stopCamBtn" class="btn-outline">Stop</button><button id="uploadQrBtn">🖼️ Upload QR</button><input type="file" id="uploadQrFile" accept="image/*" style="display:none"></div><div id="cameraPreview"></div><div style="margin-top:24px;"><label>Manual REG Number</label><input type="text" id="manualReg" placeholder="REG2026xxxx"><button id="manualProcess" style="margin-top:8px;">Proses</button></div></div></div><div id="logsPane" class="tab-pane"><div class="form-card"><div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:24px;"><input type="text" id="searchLog" placeholder="Cari Nama / REG" style="width:200px;"><button id="refreshLogsBtn">Refresh</button><button id="selectAllBtn">Select all</button><button id="deselectAllBtn">Deselect</button><button id="deleteSelectedBtn" style="background:#b91c1c;">Hapus terpilih</button><button id="deleteAllBtn" style="background:#b91c1c;">Hapus semua</button><button id="exportExcelAction">Export Excel</button><button id="backupAction">Backup</button><button id="resetDatabaseAction" style="background:#92400e;">Reset DB</button></div><div class="table-wrap"><table id="logTable"><thead><tr><th><input type="checkbox" id="checkAllMaster"></th><th>REG</th><th>Nama</th><th>Perusahaan</th><th>Kategori</th><th>Aksi</th><th>Waktu</th><th>Site</th><th>PDF</th></tr></thead><tbody id="logTableBody"></tbody></table></div></div></div></div></div>
 <div id="vmsSiteModal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); align-items:center; justify-content:center; z-index:10001;"><div style="background:white; border-radius:28px; padding:28px; width:420px; max-width:90%;"><h3>⚙️ Edit Site Names</h3><div style="margin-bottom:16px;"><label>🏭 SITE A</label><input type="text" id="vmsA" style="width:100%; padding:12px; margin-top:5px; border-radius:16px; border:1px solid #ccc;"></div><div style="margin-bottom:16px;"><label>🏢 SITE B</label><input type="text" id="vmsB" style="width:100%; padding:12px; margin-top:5px; border-radius:16px; border:1px solid #ccc;"></div><div style="margin-bottom:16px;"><label>🏬 SITE C</label><input type="text" id="vmsC" style="width:100%; padding:12px; margin-top:5px; border-radius:16px; border:1px solid #ccc;"></div><div style="display:flex; gap:12px;"><button id="vmsSaveBtn" onclick="vmsSite_submit()" style="background:#1f4e4a;">💾 Save</button><button onclick="vmsSite_close()" class="btn-outline">Cancel</button></div></div></div>
 
 <script>
-// ==================== INIT DEFAULT SITE NAMES ====================
-(function initSiteNameDefault() {
-    let saved = localStorage.getItem("vms_site_names");
-    if (!saved) {
-        localStorage.setItem("vms_site_names", JSON.stringify({
-            SITE_A: "SITE A",
-            SITE_B: "SITE B",
-            SITE_C: "SITE C"
-        }));
-    }
-})();
+// ================= FAILSAFE CORE =================
+window.VMS_SAFE = true;
 
-// ==================== ENTERPRISE VMS - HARDENED PRODUCTION ====================
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbz7QEOMl-At9XTcLag3Tv1vgM2UZqUltfRlTPlWbL8WC04vEevYXcMM4T630fLEtBz4/exec";
-const SYNC_INTERVAL_MS = 10000;
+window.addEventListener("error", function(e){
+    console.error("GLOBAL ERROR:", e.message);
+    if(window.toast) toast("⚠️ System error terdeteksi", "error");
+});
 
-let visitors = {};
-let logs = [];
-let SITE_ID = localStorage.getItem("vms_site") || "SITE_A";
+window.addEventListener("unhandledrejection", function(e){
+    console.error("PROMISE ERROR:", e.reason);
+    if(window.toast) toast("⚠️ Network/async error", "warning");
+});
 
-let isProcessingQueue = false;
-let syncQueue = [];
-let lastScanTime = {};
-let processingRegs = new Set();
-let scannerInstance = null;
-let isScanning = false;
-let currentCameraId = null;
-let cameraResetInterval = null;
+// ================= SECURITY & HARDENING =================
+const SECRET = "OMNIGUARD_SECRET_2026";
+const SCAN_COOLDOWN_MS = 3000;
+const SCAN_MAX_PER_MIN = 20;
+let scanCounter = 0;
+let syncLock = false;
+let globalScanLock = false;
 
-// ==================== SITE NAME HELPER (HARD FALLBACK) ====================
-function getSiteName(siteId) {
-    let names = {};
-    try {
-        names = JSON.parse(localStorage.getItem("vms_site_names") || "{}");
-    } catch(e) {}
+setInterval(() => scanCounter = 0, 60000);
 
-    let name = names[siteId];
-
-    if (!name || name.trim() === "" || name === "undefined") {
-        name = siteId.replace(/_/g, " ");
-        names[siteId] = name;
-        localStorage.setItem("vms_site_names", JSON.stringify(names));
-    }
-
-    return name;
+function lockUI(lock=true){
+    document.body.style.pointerEvents = lock ? "none" : "auto";
+    document.body.style.opacity = lock ? "0.6" : "1";
 }
 
-// ==================== HELPER ====================
-function toast(msg, type = "info") {
-    let t = document.createElement("div");
-    t.className = `toast-msg ${type}`;
-    t.innerText = msg;
-    document.body.appendChild(t);
-    setTimeout(() => t.remove(), 3000);
-}
-window.toast = toast;
-
-function generateReg() {
-    let reg;
-    let attempts = 0;
-    do {
-        reg = "REG" + Date.now() + Math.floor(Math.random() * 10000);
-        attempts++;
-        if (attempts > 10) break;
-    } while (visitors[SITE_ID + "_" + reg]);
-    return reg;
+function vibrate(){
+    if (navigator.vibrate) navigator.vibrate(100);
 }
 
+async function sha256(str){
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map(b => b.toString(16).padStart(2,'0'))
+    .join('');
+}
+
+// ================= INIT =================
+(function initSiteNameDefault() {  
+    let saved = localStorage.getItem("vms_site_names");  
+    if (!saved) {  
+        localStorage.setItem("vms_site_names", JSON.stringify({ SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" }));  
+    }  
+})();  
+
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyBJkvIJ5Xia9cunqRAWQ7_iVasQWWcAlZgdqrB-JflQyfAvwz7uYZmAkIzp3tjuY8N/exec";  
+const SYNC_INTERVAL_MS = 10000;  
+
+let visitors = {};  
+let logs = [];  
+let SITE_ID = localStorage.getItem("vms_site") || "SITE_A";  
+let isProcessingQueue = false;  
+let syncQueue = [];  
+let lastScanTime = {};  
+let processingRegs = new Set();  
+let scannerInstance = null;  
+let isScanning = false;  
+let currentCameraId = null;  
+let cameraResetInterval = null;  
+let actionMutex = false;  
+let localStorageVersion = parseInt(localStorage.getItem("vms_version") || "0");  
+
+function incrementVersion() {
+    localStorageVersion++;
+    localStorage.setItem("vms_version", localStorageVersion);
+}
+
+function getSiteName(siteId) {  
+    let names = {};  
+    try { names = JSON.parse(localStorage.getItem("vms_site_names") || "{}"); } catch(e) { console.error("getSiteName parse error:", e); }  
+    let name = names[siteId];  
+    if (!name || name.trim() === "" || name === "undefined") {  
+        name = siteId.replace(/_/g, " ");  
+        names[siteId] = name;  
+        localStorage.setItem("vms_site_names", JSON.stringify(names));  
+    }  
+    return name;  
+}  
+
+function toast(msg, type = "info") {  
+    let t = document.createElement("div");  
+    t.className = `toast-msg ${type}`;  
+    t.innerText = msg;  
+    document.body.appendChild(t);  
+    setTimeout(() => t.remove(), 3000);  
+}  
+window.toast = toast;  
+
+function generateReg() {  
+    let reg; let attempts = 0;  
+    do {  
+        reg = "REG" + Date.now() + Math.floor(Math.random() * 10000);  
+        attempts++;  
+        if (attempts > 10) break;  
+    } while (visitors[SITE_ID + "_" + reg]);  
+    return reg;  
+}  
+
+// ================= HARDENED STORAGE =================
 function secureSave() {
-    if (Object.keys(visitors).length > 2000) {
-        visitors = Object.fromEntries(Object.entries(visitors).slice(-1500));
+    try {
+        if (Object.keys(visitors).length > 1500) {
+            visitors = Object.fromEntries(Object.entries(visitors).slice(-1200));
+        }
+        if (logs.length > 1500) {
+            logs = logs.slice(0, 1200);
+        }
+        
+        let cleanVisitors = {};
+        for (let k in visitors) {
+            let v = { ...visitors[k] };
+            delete v.foto;
+            cleanVisitors[k] = v;
+        }
+        
+        localStorage.setItem("vms_visitors", JSON.stringify(cleanVisitors));
+        localStorage.setItem("vms_logs", JSON.stringify(logs));
+        incrementVersion();
+    } catch (e) {
+        console.error("STORAGE ERROR:", e);
+        toast("⚠️ Storage penuh, data dibersihkan", "warning");
+        localStorage.clear();
     }
-    localStorage.setItem("vms_visitors", JSON.stringify(visitors));
-    localStorage.setItem("vms_logs", JSON.stringify(logs));
 }
 
-function secureLoad() {
+function secureLoad() {  
     try {
-        let v = localStorage.getItem("vms_visitors");
-        if (v) visitors = JSON.parse(v);
-        let l = localStorage.getItem("vms_logs");
-        if (l) logs = JSON.parse(l);
+        visitors = JSON.parse(localStorage.getItem("vms_visitors")) || {};
+        logs = JSON.parse(localStorage.getItem("vms_logs")) || [];
         if (logs.length > 2000) logs = logs.slice(0, 1500);
         window.visitors = visitors;
         window.logs = logs;
-    } catch (e) { console.warn(e); }
-}
+    } catch(e) {
+        visitors = {};
+        logs = [];
+        toast("⚠️ Data corrupt, reset", "warning");
+        console.error("secureLoad error:", e);
+    }
+}  
 
-function addLocalLog(reg, action) {
-    let siteKey = SITE_ID + "_" + reg;
-    let v = visitors[siteKey];
-    let name = v?.nama || reg;
-    let company = v?.perusahaan || "";
-    let category = v?.kategori || "UMUM";
-    logs.unshift({ 
-        reg, 
-        name, 
-        company, 
-        category, 
-        action, 
-        time: Date.now(), 
-        site: SITE_ID,
-        site_name: getSiteName(SITE_ID)
-    });
-    if (logs.length > 2000) logs = logs.slice(0, 1500);
+function cleanMemory(){
+    if (logs.length > 1000) logs = logs.slice(0, 800);
+    if (Object.keys(visitors).length > 1000){
+        visitors = Object.fromEntries(Object.entries(visitors).slice(-800));
+    }
     secureSave();
 }
+setInterval(cleanMemory, 60000);
 
-// ==================== API CALLS ====================
+function addLocalLog(reg, action) {  
+    let siteKey = SITE_ID + "_" + reg;  
+    let v = visitors[siteKey];  
+    let name = v?.nama || reg;  
+    let company = v?.perusahaan || "";  
+    let category = v?.kategori || "UMUM";  
+    logs.unshift({ reg, name, company, category, action, time: Date.now(), site: SITE_ID, site_name: getSiteName(SITE_ID) });  
+    if (logs.length > 2000) logs = logs.slice(0, 1500);  
+    secureSave();  
+}  
+
+// ================= API CALL (HARDENED) =================
 async function apiCall(params) {
-    if (!navigator.onLine) {
-        return { status: "offline", message: "No internet connection" };
-    }
+    if (!navigator.onLine) return { status: "offline" };
+    if (document.hidden) return { status: "background" };
+    
     try {
-        const formData = new URLSearchParams(params);
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: formData.toString()
+        const timestamp = Date.now().toString();
+        const base = String(params.reg || "") + String(params.action) + String(timestamp) + String(SECRET);
+        const sign = await sha256(base);
+        const formData = new URLSearchParams({
+            ...params,
+            timestamp,
+            sign,
+            ua: navigator.userAgent
         });
-        if (!response.ok) throw new Error("Network error");
-        const result = await response.json();
-        return result;
-    } catch (error) {
-        console.error("API Error:", error);
-        return { status: "error", message: error.message };
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+
+        const res = await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            body: formData,
+            signal: controller.signal
+        });
+
+        clearTimeout(timeout);
+
+        if (!res.ok) return { status: "error_network" };
+
+        let data;
+        try {
+            data = await res.json();
+        } catch {
+            return { status: "error_parse" };
+        }
+
+        return data;
+    } catch (e) {
+        return { status: "error" };
     }
 }
 
-async function registerVisitor(reg, data) {
-    return await apiCall({
-        action: "register",
-        reg: reg,
-        name: data.nama,
-        company: data.perusahaan,
-        purpose: data.tujuan,
-        pic: data.pic,
-        dept: data.dept,
-        start: data.startDate,
-        exp: data.expDate,
-        category: data.kategori,
-        site_id: SITE_ID,
-        site_name: (getSiteName(SITE_ID) || SITE_ID.replace(/_/g," ")).trim(),
-        photo: data.foto || ""
-    });
-}
+async function registerVisitor(reg, data) {  
+    return await apiCall({ action: "register", reg, name: data.nama, company: data.perusahaan, purpose: data.tujuan, pic: data.pic, dept: data.dept, start: data.startDate, exp: data.expDate, category: data.kategori, site_id: SITE_ID, site_name: (getSiteName(SITE_ID) || SITE_ID.replace(/_/g," ")).trim(), photo: data.foto || "" });  
+}  
 
-async function walkinVisitor(reg, data) {
-    return await apiCall({
-        action: "walkin",
-        reg: reg,
-        name: data.nama,
-        company: data.perusahaan,
-        purpose: data.tujuan,
-        pic: data.pic,
-        dept: data.dept,
-        start: data.startDate,
-        exp: data.expDate,
-        category: data.kategori,
-        site_id: SITE_ID,
-        site_name: (getSiteName(SITE_ID) || SITE_ID.replace(/_/g," ")).trim(),
-        photo: data.foto || ""
-    });
-}
+async function walkinVisitor(reg, data) {  
+    return await apiCall({ action: "walkin", reg, name: data.nama, company: data.perusahaan, purpose: data.tujuan, pic: data.pic, dept: data.dept, start: data.startDate, exp: data.expDate, category: data.kategori, site_id: SITE_ID, site_name: (getSiteName(SITE_ID) || SITE_ID.replace(/_/g," ")).trim(), photo: data.foto || "" });  
+}  
 
-async function checkinVisitor(reg) { return await apiCall({ action: "checkin", reg: reg, site_id: SITE_ID }); }
-async function checkoutVisitor(reg) { return await apiCall({ action: "checkout", reg: reg, site_id: SITE_ID }); }
-async function generateQRCode(reg, nama, perusahaan, expDate) { return await apiCall({ action: "generateqr", reg: reg }); }
-async function validateQRCode(qrData) { return await apiCall({ action: "validateqr", qrData: qrData }); }
+async function checkinVisitor(reg) { return await apiCall({ action: "checkin", reg, site_id: SITE_ID }); }  
+async function checkoutVisitor(reg) { return await apiCall({ action: "checkout", reg, site_id: SITE_ID }); }  
+async function generateQRCode(reg) { return await apiCall({ action: "generateqr", reg }); }  
+async function validateQRCode(qrData) { return await apiCall({ action: "validateqr", qrData }); }  
 
 async function pullFromSheet() {
+    if (syncLock) return;
+    if (document.hidden) return;
+    syncLock = true;
     try {
-        const response = await fetch(APPS_SCRIPT_URL + "?action=pull&site_id=" + SITE_ID + "&t=" + Date.now());
-        if (!response.ok) throw new Error("Network error");
-        const result = await response.json();
+        const response = await fetch(APPS_SCRIPT_URL + "?action=pull&site_id=" + SITE_ID + "&t=" + Date.now());  
+        if (!response.ok) throw new Error("Network error");  
+        const result = await response.json();  
         if (result.status === "success" && result.data) syncVisitorStatus(result.data);
     } catch (err) { console.error("Pull error:", err); }
+    finally { syncLock = false; }
+}  
+
+function syncVisitorStatus(sheetData) {  
+    if (!Array.isArray(sheetData)) return;  
+    for (let i = 1; i < sheetData.length; i++) {  
+        const row = sheetData[i];  
+        const reg = row[1];
+        const siteId = row[13];
+        const status = row[10];
+        const checkin = row[11];
+        const checkout = row[12];
+        if (!reg || siteId !== SITE_ID) continue;  
+        const key = SITE_ID + "_" + reg;  
+        let rawTime = checkout || checkin || row[0];  
+        let sheetTime = rawTime ? new Date(rawTime).getTime() : 0;  
+        if (isNaN(sheetTime)) sheetTime = 0;  
+        if (!visitors[key]) {  
+            visitors[key] = {  
+                nama: row[2] || "Unknown",  
+                perusahaan: row[3] || "",  
+                kategori: row[9] || "UMUM",  
+                tujuan: row[4] || "-",  
+                pic: row[5] || "-",  
+                dept: row[6] || "-",  
+                startDate: row[7] || "",  
+                expDate: row[8] || "",  
+                foto: "",  
+                sessions: [],  
+                currentStatus: status === "IN" ? "IN" : "OUT",  
+                updatedAt: sheetTime  
+            };  
+        } else {  
+            const localTime = visitors[key].updatedAt || 0;  
+            if (sheetTime >= localTime || !localTime) {  
+                visitors[key].currentStatus = status === "IN" ? "IN" : "OUT";  
+                visitors[key].updatedAt = sheetTime;  
+            }  
+        }  
+    }  
+    secureSave();  
+    renderDashboard();  
+    renderLogTable();  
 }
 
-// ==================== SYNC PARSING ====================
-function syncVisitorStatus(sheetData) {
-    if (!Array.isArray(sheetData)) return;
-    for (let i = 1; i < sheetData.length; i++) {
-        const row = sheetData[i];
-        const reg = row[9];
-        const siteId = row[14];
-        if (!reg || siteId !== SITE_ID) continue;
-        const sheetStatus = row[11] === "IN" ? "IN" : "OUT";
-        const key = SITE_ID + "_" + reg;
-        
-        if (!visitors[key]) {
-            visitors[key] = {
-                nama: row[1] || "Unknown",
-                perusahaan: row[2] || "",
-                kategori: row[8] || "UMUM",
-                tujuan: row[3] || "-",
-                pic: row[4] || "-",
-                dept: row[5] || "-",
-                startDate: row[6] || "",
-                expDate: row[7] || "",
-                foto: row[16] || "",
-                sessions: [],
-                currentStatus: sheetStatus,
-                updatedAt: Date.now()
-            };
-        } else {
-            if (visitors[key].currentStatus !== sheetStatus) {
-                visitors[key].currentStatus = sheetStatus;
-                visitors[key].updatedAt = Date.now();
+function updateQueueStatus() {  
+    let div = document.getElementById("queueStatusIndicator");  
+    if (!div) { div = document.createElement("div"); div.id = "queueStatusIndicator"; div.className = "queue-status"; document.body.appendChild(div); }  
+    div.innerHTML = syncQueue.length ? `📦 Queue: ${syncQueue.length}` : `✅ Elite Sync`;  
+}  
+
+function persistQueue() {  
+    try { localStorage.setItem("vms_sync_queue", JSON.stringify(syncQueue)); updateQueueStatus(); } catch (e) { console.error("persistQueue error:", e); }  
+}  
+
+function addToQueue(action, reg, data = null) {  
+    syncQueue = syncQueue.filter(q => !(q.reg === reg && q.action === action));
+    syncQueue.push({ id: Date.now() + "_" + reg, action, reg, data, retryCount: 0, timestamp: Date.now(), fingerprint: action + "_" + reg });  
+    persistQueue();  
+    if (navigator.onLine) processQueue();  
+}  
+
+async function processQueue() {  
+    if (isProcessingQueue || syncQueue.length === 0) return;  
+    isProcessingQueue = true;  
+    const newQueue = [];  
+    for (const item of syncQueue) {  
+        let result;  
+        try {  
+            if (item.action === "checkin") result = await checkinVisitor(item.reg);  
+            else if (item.action === "checkout") result = await checkoutVisitor(item.reg);  
+            else if (item.action === "register") result = await registerVisitor(item.reg, item.data);  
+            else if (item.action === "walkin") result = await walkinVisitor(item.reg, item.data);  
+        } catch (e) { result = { status: "error" }; }  
+        if (result?.status === "duplicate") { toast("REG sudah terdaftar!", "warning"); continue; }  
+        if (result?.status !== "success") {  
+            item.retryCount = (item.retryCount || 0) + 1;  
+            let delay = Math.min(Math.pow(2, item.retryCount) * 1000, 10000);  
+            if (item.retryCount <= 5) { await new Promise(r => setTimeout(r, delay)); newQueue.push(item); }  
+            else console.warn("DROP QUEUE:", item);  
+        }  
+    }  
+    syncQueue = newQueue;  
+    persistQueue();  
+    isProcessingQueue = false;  
+}  
+
+// ================= PERFORMANCE OPTIMIZED CHARTS =================
+function renderDashboard() {  
+    try {  
+        let v = Object.values(visitors);  
+        let active = v.filter(x => x.currentStatus === "IN").length;  
+        let todayCheckins = logs.filter(l => new Date(l.time).toDateString() === new Date().toDateString() && l.action === "CHECK_IN").length;  
+        let statsWidget = document.getElementById("statsWidget");  
+        if (statsWidget) {  
+            statsWidget.innerHTML = `<div class="stat-card"><h4>Total Visitors</h4><div class="stat-number">${v.length}</div></div><div class="stat-card"><h4>Active Inside</h4><div class="stat-number">${active}</div></div><div class="stat-card"><h4>Check-ins Today</h4><div class="stat-number">${todayCheckins}</div></div>`;  
+        }  
+        let last7Days = [], last7Labels = [];  
+        for (let i = 6; i >= 0; i--) {  
+            let d = new Date();  
+            d.setDate(d.getDate() - i);  
+            last7Labels.push(d.toLocaleDateString("id", { weekday: "short" }));  
+            let count = logs.filter(l => new Date(l.time).toDateString() === d.toDateString() && l.action === "CHECK_IN").length;  
+            last7Days.push(count);  
+        }  
+        let trendChart = document.getElementById("trendChart");  
+        if (trendChart && window.Chart) {  
+            if (window.lineChart) {
+                window.lineChart.data.labels = last7Labels;
+                window.lineChart.data.datasets[0].data = last7Days;
+                window.lineChart.update();
+            } else {
+                window.lineChart = new Chart(trendChart, { type: "line", data: { labels: last7Labels, datasets: [{ label: "Daily Visits", data: last7Days, borderColor: "#1f4e4a", fill: false }] } });
             }
-            if (row[16] && !visitors[key].foto) {
-                visitors[key].foto = row[16];
+        }  
+        let catCount = { VVIP: 0, VIP: 0, UMUM: 0 };  
+        v.forEach(x => { if (x.kategori) catCount[x.kategori]++; });  
+        let categoryChart = document.getElementById("categoryChart");  
+        if (categoryChart && window.Chart) {  
+            if (window.pieChart) {
+                window.pieChart.data.datasets[0].data = [catCount.VVIP, catCount.VIP, catCount.UMUM];
+                window.pieChart.update();
+            } else {
+                window.pieChart = new Chart(categoryChart, { type: "pie", data: { labels: ["VVIP", "VIP", "UMUM"], datasets: [{ data: [catCount.VVIP, catCount.VIP, catCount.UMUM], backgroundColor: ["#fbbf24", "#94a3b8", "#1f4e4a"] }] } });
             }
-        }
-    }
-    secureSave();
-    renderDashboard();
-    renderLogTable();
-}
+        }  
+    } catch (e) { console.error("renderDashboard error:", e); }  
+}  
 
-// ==================== QUEUE ====================
-function updateQueueStatus() {
-    let div = document.getElementById("queueStatusIndicator");
-    if (!div) {
-        div = document.createElement("div");
-        div.id = "queueStatusIndicator";
-        div.className = "queue-status";
-        document.body.appendChild(div);
-    }
-    div.innerHTML = syncQueue.length ? `📦 Queue: ${syncQueue.length}` : `✅ Elite Sync`;
-}
+function renderLogTable() {  
+    try {  
+        let search = document.getElementById("searchLog")?.value.toLowerCase() || "";  
+        let filtered = logs.filter(l => (l.name?.toLowerCase().includes(search) || l.reg?.toLowerCase().includes(search)) && (!l.site || l.site === SITE_ID));  
+        let tbody = document.getElementById("logTableBody");  
+        if (!tbody) return;  
+        tbody.innerHTML = "";  
+        filtered.slice(0, 200).forEach(l => {  
+            let row = tbody.insertRow();  
+            row.insertCell(0).innerHTML = `<input type="checkbox" class="logCheckItem" data-reg="${l.reg}">`;  
+            row.insertCell(1).innerText = l.reg;  
+            row.insertCell(2).innerText = l.name;  
+            row.insertCell(3).innerText = l.company;  
+            row.insertCell(4).innerHTML = `<span class="badge badge-${l.category}">${l.category}</span>`;  
+            row.insertCell(5).innerText = l.action;  
+            row.insertCell(6).innerText = new Date(l.time).toLocaleString();  
+            row.insertCell(7).innerText = l.site_name || l.site || "SITE_A";  
+            let btn = document.createElement("button");  
+            btn.innerText = "PDF";  
+            btn.classList.add("btn-outline");  
+            btn.style.padding = "4px 12px";  
+            let key = SITE_ID + "_" + l.reg;  
+            let v = visitors[key];  
+            if (v) btn.onclick = () => showPreview(l.reg, v);  
+            row.insertCell(8).appendChild(btn);  
+        });  
+    } catch (e) { console.error("renderLogTable error:", e); }  
+}  
 
-function persistQueue() {
-    try {
-        localStorage.setItem("vms_sync_queue", JSON.stringify(syncQueue));
-        updateQueueStatus();
-    } catch (e) {}
-}
-
-function addToQueue(action, reg, data = null) {
-    const exists = syncQueue.some(q => q.action === action && q.reg === reg);
-    if (!exists) {
-        syncQueue.push({ id: Date.now() + "_" + reg, action, reg, data, retryCount: 0, timestamp: Date.now() });
-        persistQueue();
-        if (navigator.onLine) processQueue();
-    }
-}
-
-async function processQueue() {
-    if (isProcessingQueue || syncQueue.length === 0) return;
-    isProcessingQueue = true;
-    const newQueue = [];
-    for (const item of syncQueue) {
-        let result;
-        try {
-            if (item.action === "checkin") result = await checkinVisitor(item.reg);
-            else if (item.action === "checkout") result = await checkoutVisitor(item.reg);
-            else if (item.action === "register") result = await registerVisitor(item.reg, item.data);
-            else if (item.action === "walkin") result = await walkinVisitor(item.reg, item.data);
-        } catch (e) { result = { status: "error" }; }
-        
-        if (result?.status === "duplicate") {
-            toast("REG sudah terdaftar!", "warning");
-            continue;
-        }
-        
-        if (result?.status !== "success") {
-            item.retryCount = (item.retryCount || 0) + 1;
-            if (item.retryCount <= 3) newQueue.push(item);
-            else console.warn("DROP QUEUE:", item);
-        }
-        await new Promise(r => setTimeout(r, 400));
-    }
-    syncQueue = newQueue;
-    persistQueue();
-    isProcessingQueue = false;
-}
-
-// ==================== UI RENDER ====================
-function renderDashboard() {
-    try {
-        let v = Object.values(visitors);
-        let active = v.filter(x => x.currentStatus === "IN").length;
-        let todayCheckins = logs.filter(l => new Date(l.time).toDateString() === new Date().toDateString() && l.action === "CHECK_IN").length;
-        let statsWidget = document.getElementById("statsWidget");
-        if (statsWidget) {
-            statsWidget.innerHTML = `
-                <div class="stat-card"><h4>Total Visitors</h4><div class="stat-number">${v.length}</div></div>
-                <div class="stat-card"><h4>Active Inside</h4><div class="stat-number">${active}</div></div>
-                <div class="stat-card"><h4>Check-ins Today</h4><div class="stat-number">${todayCheckins}</div></div>
-            `;
-        }
-        let last7Days = [], last7Labels = [];
-        for (let i = 6; i >= 0; i--) {
-            let d = new Date();
-            d.setDate(d.getDate() - i);
-            last7Labels.push(d.toLocaleDateString("id", { weekday: "short" }));
-            let count = logs.filter(l => new Date(l.time).toDateString() === d.toDateString() && l.action === "CHECK_IN").length;
-            last7Days.push(count);
-        }
-        let trendChart = document.getElementById("trendChart");
-        if (trendChart && window.Chart) {
-            if (window.lineChart) window.lineChart.destroy();
-            window.lineChart = new Chart(trendChart, {
-                type: "line",
-                data: { labels: last7Labels, datasets: [{ label: "Daily Visits", data: last7Days, borderColor: "#1f4e4a", fill: false }] }
-            });
-        }
-        let catCount = { VVIP: 0, VIP: 0, UMUM: 0 };
-        v.forEach(x => { if (x.kategori) catCount[x.kategori]++; });
-        let categoryChart = document.getElementById("categoryChart");
-        if (categoryChart && window.Chart) {
-            if (window.pieChart) window.pieChart.destroy();
-            window.pieChart = new Chart(categoryChart, {
-                type: "pie",
-                data: { labels: ["VVIP", "VIP", "UMUM"], datasets: [{ data: [catCount.VVIP, catCount.VIP, catCount.UMUM], backgroundColor: ["#fbbf24", "#94a3b8", "#1f4e4a"] }] }
-            });
-        }
-    } catch (e) { console.error(e); }
-}
-
-function renderLogTable() {
-    try {
-        let search = document.getElementById("searchLog")?.value.toLowerCase() || "";
-        let filtered = logs.filter(l => (l.name?.toLowerCase().includes(search) || l.reg?.toLowerCase().includes(search)) && (!l.site || l.site === SITE_ID));
-        let tbody = document.getElementById("logTableBody");
-        if (!tbody) return;
-        tbody.innerHTML = "";
-        filtered.slice(0, 500).forEach(l => {
-            let row = tbody.insertRow();
-            row.insertCell(0).innerHTML = `<input type="checkbox" class="logCheckItem" data-reg="${l.reg}">`;
-            row.insertCell(1).innerText = l.reg;
-            row.insertCell(2).innerText = l.name;
-            row.insertCell(3).innerText = l.company;
-            row.insertCell(4).innerHTML = `<span class="badge badge-${l.category}">${l.category}</span>`;
-            row.insertCell(5).innerText = l.action;
-            row.insertCell(6).innerText = new Date(l.time).toLocaleString();
-            row.insertCell(7).innerText = l.site_name || l.site || "SITE_A";
-            let btn = document.createElement("button");
-            btn.innerText = "PDF";
-            btn.classList.add("btn-outline");
-            btn.style.padding = "4px 12px";
-            let key = SITE_ID + "_" + l.reg;
-            let v = visitors[key];
-            if (v) btn.onclick = () => showPreview(l.reg, v);
-            row.insertCell(8).appendChild(btn);
-        });
-    } catch (e) { console.error(e); }
-}
-
-// ==================== QR & SCANNER ====================
-async function processScan(qrText) {
+async function processScan(qrText) {  
+    if (actionMutex) return false;
+    if (globalScanLock) return false;
     if (!qrText || typeof qrText !== "string") return false;
-    qrText = qrText.trim();
     
-    let mode = document.getElementById("scanMode").value;
-    let reg = null;
+    if (scanCounter > SCAN_MAX_PER_MIN) {
+        toast("⚠️ Scanner overload, tunggu sebentar", "warning");
+        return false;
+    }
+    scanCounter++;
     
-    if (qrText.startsWith("REG")) {
-        reg = qrText;
-    } else {
+    globalScanLock = true;
+    qrText = qrText.trim();  
+    const mode = document.getElementById("scanMode").value;  
+    let reg = null;  
+    if (qrText.startsWith("REG")) {  
+        reg = qrText;  
+    } else {  
         let validation = await validateQRCode(qrText);
-        if (validation.status !== "success") {
+        if (validation.status === "success") {
+            reg = validation.data.reg;
+        } else if (qrText.startsWith("REG")) {
+            reg = qrText;
+        } else {
             toast("QR tidak valid!", "error");
-            return false;
-        }
-        reg = validation.data?.reg;
-        if (!reg) {
-            toast("QR tidak valid!", "error");
+            globalScanLock = false;
             return false;
         }
     }
-    
-    if (!reg) {
-        toast("QR tidak valid!", "error");
-        return false;
-    }
-    
-    if (lastScanTime[reg] && Date.now() - lastScanTime[reg] < 1500) {
-        toast("Scan terlalu cepat", "warning");
-        return false;
-    }
-    lastScanTime[reg] = Date.now();
-    if (processingRegs.has(reg)) {
-        toast("Sedang diproses", "warning");
-        return false;
-    }
-    processingRegs.add(reg);
-    try {
-        let siteKey = SITE_ID + "_" + reg;
-        let visitor = visitors[siteKey];
-        if (!visitor) {
-            visitor = {
-                nama: "Unknown", perusahaan: "", kategori: "UMUM", tujuan: "-", pic: "-", dept: "-",
-                startDate: "", expDate: "", foto: "", sessions: [],
-                currentStatus: "OUT", updatedAt: Date.now()
-            };
-            visitors[siteKey] = visitor;
-        }
-        let today = new Date();
-        let expDate = new Date(visitor.expDate);
-        if (expDate && !isNaN(expDate) && today > expDate) {
-            toast("Visitor sudah expired!", "error");
-            return false;
+    if (!reg) { toast("QR tidak valid!", "error"); globalScanLock = false; return false; }  
+    const nowTime = Date.now();  
+    if (lastScanTime[reg] && nowTime - lastScanTime[reg] < SCAN_COOLDOWN_MS) { toast("Scan terlalu cepat", "warning"); globalScanLock = false; return false; }  
+    lastScanTime[reg] = nowTime;  
+    if (processingRegs.has(reg)) { toast("Sedang diproses", "warning"); globalScanLock = false; return false; }  
+    processingRegs.add(reg);  
+    actionMutex = true;  
+    try {  
+        let siteKey = SITE_ID + "_" + reg;  
+        let visitor = visitors[siteKey];  
+        if (!visitor) {  
+            visitor = { nama: "Unknown", perusahaan: "", kategori: "UMUM", tujuan: "-", pic: "-", dept: "-", startDate: "", expDate: "", foto: "", sessions: [], currentStatus: "OUT", updatedAt: Date.now() };  
+            visitors[siteKey] = visitor;  
+        }  
+        let today = new Date();  
+        let expDate = visitor.expDate ? new Date(visitor.expDate) : null;
+        if (expDate && !isNaN(expDate.getTime())) {
+            expDate.setHours(23, 59, 59, 999);
+            if (expDate < today) { toast("Visitor sudah expired!", "error"); return false; }
+        } else {
+            console.warn("EXP fallback used for:", reg);
         }
         if (mode === "CHECK_IN") {
             let hasOpen = visitor.sessions?.some(s => !s.checkOut);
@@ -496,618 +526,503 @@ async function processScan(qrText) {
                 toast("Sudah dalam keadaan CHECK-IN!", "warning");
                 return false;
             }
-            if (!visitor.sessions) visitor.sessions = [];
-            visitor.sessions.push({ checkIn: Date.now(), checkOut: null });
-            visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now() };
-            addLocalLog(reg, "CHECK_IN");
             let result = await checkinVisitor(reg);
-            if (result.status !== "success") addToQueue("checkin", reg);
-            toast(`✅ CHECK-IN ${visitor.nama} berhasil`, "success");
+            if (result.status === "success") {
+                if (!visitor.sessions) visitor.sessions = [];
+                visitor.sessions.push({ checkIn: Date.now(), checkOut: null });
+                visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now() };
+                addLocalLog(reg, "CHECK_IN");
+                vibrate();
+                toast(`CHECK-IN ${visitor.nama} berhasil`, "success");
+            } else if (result.status === "already_in") {
+                toast("Sudah CHECK-IN!", "warning");
+            } else {
+                addToQueue("checkin", reg);
+                toast("Masuk queue (offline/gagal)", "warning");
+            }
+        } else {
+            let result = await checkoutVisitor(reg);
+            if (result.status === "success") {
+                let openSession = visitor.sessions?.find(s => !s.checkOut);
+                if (openSession) openSession.checkOut = Date.now();
+                visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now() };
+                addLocalLog(reg, "CHECK_OUT");
+                vibrate();
+                toast(`CHECK-OUT ${visitor.nama} berhasil`, "success");
+            } else if (result.status === "not_checked_in") {
+                toast("Belum CHECK-IN!", "warning");
+            } else {
+                addToQueue("checkout", reg);
+                toast("Masuk queue", "warning");
+            }
+        }
+        renderDashboard();  
+        renderLogTable();  
+        secureSave();  
+        await pullFromSheet();  
+        return true;  
+    } catch (e) {  
+        console.error("processScan error:", e);  
+        return false;  
+    } finally {  
+        actionMutex = false;  
+        globalScanLock = false;
+        setTimeout(() => processingRegs.delete(reg), 1000);  
+    }  
+}  
+
+async function generateQRandShow(reg, data) {  
+    try {
+        let result = await generateQRCode(reg);  
+        let qrData = reg;  
+        if (result.status === "success" && result.data) qrData = result.data;  
+        let qrImage;  
+        try {  
+            qrImage = await QRCode.toDataURL(qrData, { width: 200 });  
+        } catch (e) {  
+            console.error("QR FAIL:", e);  
+            try { qrImage = await QRCode.toDataURL(reg, { width: 200 }); } catch (e2) { console.error("QR FALLBACK FAIL:", e2); qrImage = null; }  
+        }  
+        showPreviewWithQR(reg, data, qrImage);  
+    } catch (e) {
+        console.error("generateQRandShow error:", e);
+        toast("Gagal generate QR", "error");
+    }
+}  
+
+function showPreviewWithQR(reg, data, qrImage) {  
+    if (!qrImage || !qrImage.startsWith("data:image")) { toast("QR gagal dibuat, ulangi!", "error"); return; }  
+    let modal = document.createElement("div");  
+    modal.className = "modal-overlay";  
+    modal.innerHTML = `<div class="modal-card"><h3>📄 Preview Invitation</h3><div style="background:#f8fafc; padding:14px; border-radius:20px; margin-bottom:16px;"><p><strong>Name</strong> : ${data.nama}</p><p><strong>Company</strong> : ${data.perusahaan}</p><p><strong>Purpose</strong> : ${data.tujuan}</p><p><strong>PIC</strong> : ${data.pic}</p><p><strong>Department</strong> : ${data.dept}</p><p><strong>Validity</strong> : ${data.startDate} → ${data.expDate}</p><p><strong>REG</strong> : ${reg}</p></div><img class="qr-preview" src="${qrImage}"><div class="flex-btns"><button id="previewDownloadBtn">Download PDF</button><button id="previewCloseBtn" class="btn-outline">Close</button></div></div>`;  
+    document.body.appendChild(modal);  
+    setTimeout(() => modal.classList.add("active"), 10);  
+    let downloadBtn = modal.querySelector("#previewDownloadBtn");  
+    let closeBtn = modal.querySelector("#previewCloseBtn");  
+    if (downloadBtn) {  
+        downloadBtn.onclick = async () => {  
+            if (window.downloading) return;  
+            window.downloading = true;  
+            if (!qrImage || !qrImage.startsWith("data:image")) { toast("QR belum siap, tunggu...", "warning"); window.downloading = false; return; }  
+            await new Promise(r => setTimeout(r, 200));  
+            data.qrImage = qrImage;  
+            await downloadPDF(reg, data);  
+            window.downloading = false;  
+            modal.remove();  
+        };  
+    }  
+    if (closeBtn) closeBtn.onclick = () => modal.remove();  
+}  
+
+async function downloadPDF(reg, data) {  
+    try {  
+        await ensureJSPDF();  
+        const { jsPDF } = window.jspdf;  
+        const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });  
+        doc.setFillColor(31, 78, 74);  
+        doc.rect(0, 0, 210, 40, "F");  
+        doc.setTextColor(255, 255, 255);  
+        doc.setFontSize(22);  
+        doc.text("INVITATION LETTER", 105, 20, { align: "center" });  
+        doc.setTextColor(0, 0, 0);  
+        doc.setFontSize(12);  
+        doc.setFont(undefined, "bold");  
+        doc.text("VISITOR INFORMATION", 20, 60);  
+        let y = 75;  
+        doc.setFontSize(10);  
+        doc.setFont(undefined, "normal");  
+        doc.text(`Name : ${data.nama || "-"}`, 20, y); y += 8;  
+        doc.text(`Company : ${data.perusahaan || "-"}`, 20, y); y += 8;  
+        doc.text(`Purpose : ${data.tujuan || "-"}`, 20, y); y += 8;  
+        doc.text(`PIC : ${data.pic || "-"}`, 20, y); y += 8;  
+        doc.text(`Department : ${data.dept || "-"}`, 20, y); y += 8;  
+        doc.text(`REG Number : ${reg}`, 20, y); y += 8;  
+        doc.text(`Start Date : ${data.startDate || "-"}`, 20, y); y += 8;  
+        doc.text(`Expired Date : ${data.expDate || "-"}`, 20, y); y += 8;  
+        doc.text(`Status : ${data.currentStatus === "IN" ? "IN (Inside Area)" : "OUT"}`, 20, y);  
+        if (data.qrImage && data.qrImage.startsWith("data:image")) { try { doc.addImage(data.qrImage, "PNG", 140, 60, 40, 40); } catch (e) { console.error("QR image PDF error:", e); } }  
+        if (data.foto && data.foto.startsWith("data:image")) { try { let fotoLower = data.foto.toLowerCase(); let format = fotoLower.includes("png") ? "PNG" : "JPEG"; doc.addImage(data.foto, format, 140, 130, 40, 40); } catch (e) { console.error("Photo PDF error:", e); } }  
+        let blob = doc.output("blob");  
+        let url = URL.createObjectURL(blob);  
+        let a = document.createElement("a");  
+        a.href = url;  
+        a.download = `INVITATION_${reg}.pdf`;  
+        document.body.appendChild(a);  
+        a.click();  
+        document.body.removeChild(a);  
+        setTimeout(() => URL.revokeObjectURL(url), 3000);  
+        toast(`PDF ${reg} berhasil di download`, "success");  
+        return true;  
+    } catch (err) {  
+        console.error("PDF Error:", err);  
+        toast("Error saat generate PDF", "error");  
+        return false;  
+    }  
+}  
+
+async function ensureJSPDF() {  
+    if (window.jspdf) return true;  
+    return new Promise(resolve => {  
+        let i = 0, iv = setInterval(() => {  
+            if (window.jspdf) { clearInterval(iv); resolve(true); }  
+            if (i++ > 100) { clearInterval(iv); resolve(false); }  
+        }, 100);  
+    });  
+}  
+
+function showPreview(reg, data) { generateQRandShow(reg, data); }  
+
+async function initScanner() {  
+    if (scannerInstance) {  
+        try { await scannerInstance.stop(); } catch(e) { console.error("stop error:", e); }  
+        try { await scannerInstance.clear(); } catch(e) { console.error("clear error:", e); }  
+        scannerInstance = null;  
+    }  
+    try {  
+        let cameras = await Html5Qrcode.getCameras();  
+        if (!cameras || cameras.length === 0) { toast("Tidak ada kamera terdeteksi", "error"); return false; }  
+        currentCameraId = cameras[0].id;  
+        scannerInstance = new Html5Qrcode("cameraPreview");  
+        return true;  
+    } catch (err) { toast("Gagal inisialisasi kamera", "error"); console.error("initScanner error:", err); return false; }  
+}  
+
+async function startScanner() {  
+    if (isScanning) return;  
+    if (!scannerInstance) { let init = await initScanner(); if (!init) return; }  
+    try {  
+        await scannerInstance.start(currentCameraId, { fps: 10, qrbox: { width: 280, height: 280 }, aspectRatio: 1.0 },  
+            async (decodedText) => { if (!processingRegs.has(decodedText)) await processScan(decodedText); },  
+            (error) => { if (error && !error.includes("No MultiFormat Readers")) console.log("Scan error:", error); }  
+        );  
+        isScanning = true;  
+        toast("Scanner siap", "success");  
+        if (cameraResetInterval) clearInterval(cameraResetInterval);  
+        cameraResetInterval = setInterval(async () => { 
+            if (!isScanning) return;
+            try {
+                await stopScanner();
+                await startScanner();
+            } catch(e){
+                console.warn("Camera reset fail", e);
+            }
+        }, 180000);
+    } catch (err) { toast("Gagal start kamera: " + err.message, "error"); console.error("startScanner error:", err); isScanning = false; }  
+}  
+
+async function stopScanner() {  
+    if (cameraResetInterval) { clearInterval(cameraResetInterval); cameraResetInterval = null; }  
+    if (scannerInstance && isScanning) { try { await scannerInstance.stop(); await scannerInstance.clear(); } catch (err) { console.error("stopScanner error:", err); } }  
+    isScanning = false;  
+}  
+
+function setSite(site) {  
+    SITE_ID = site;  
+    localStorage.setItem("vms_site", SITE_ID);  
+    document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => { if (sel && sel.value !== site) sel.value = site; });  
+    vmsSite_applyToUI();  
+    toast(`Site aktif: ${getSiteName(SITE_ID)}`, "success");  
+    renderDashboard();  
+    renderLogTable();  
+}  
+
+// ================= EVENT HANDLERS with LOCK UI =================
+document.getElementById("generateQRBtn").onclick = async () => {  
+    if (actionMutex) return;  
+    actionMutex = true;  
+    lockUI(true);
+    try {  
+        let nama = document.getElementById("regName").value;  
+        let perusahaan = document.getElementById("regCompany").value;  
+        let kategori = document.getElementById("regCategory").value;  
+        let tujuan = document.getElementById("regPurpose").value;  
+        let custom = document.getElementById("regCustomPurpose").value;  
+        if (tujuan === "Lainnya") tujuan = custom || "Custom";  
+        let pic = document.getElementById("regPic").value;  
+        let dept = document.getElementById("regDept").value;  
+        let startDate = document.getElementById("regStartDate").value || new Date().toISOString().slice(0, 10);  
+        let expDate = document.getElementById("regExpDate").value;  
+        if (!nama || !perusahaan || !pic || !dept || !expDate) { toast("Lengkapi semua field wajib", "error"); return; }  
+        let reg = generateReg();  
+        let siteKey = SITE_ID + "_" + reg;  
+        if (visitors[siteKey]) { toast("REG sudah ada di local!", "warning"); return; }  
+        let foto = "";  
+        let file = document.getElementById("regPhotoFile").files[0];  
+        if (file) {  
+            try {  
+                let reader = await new Promise(resolve => { let fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.readAsDataURL(file); });  
+                let img = new Image();  
+                img.src = reader;  
+                await new Promise(r => img.onload = r);  
+                let canvas = document.createElement("canvas");  
+                let maxWidth = 400;  
+                let scale = maxWidth / img.width;  
+                canvas.width = maxWidth;  
+                canvas.height = img.height * scale;  
+                let ctx = canvas.getContext("2d");  
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);  
+                foto = canvas.toDataURL("image/jpeg", 0.5);  
+            } catch (e) { console.warn("Photo processing error:", e); }  
+        }  
+        let data = { nama, perusahaan, kategori, tujuan, pic, dept, startDate, expDate, foto, sessions: [], currentStatus: "OUT", updatedAt: Date.now() };  
+        visitors[siteKey] = data;  
+        addLocalLog(reg, "REGISTER");  
+        let result = await registerVisitor(reg, data);  
+        if (!result || typeof result !== "object") { addToQueue("register", reg, data); toast(`⚠️ ${nama} ditambahkan ke antrian`, "warning"); renderDashboard(); renderLogTable(); secureSave(); return; }  
+        if (result.status === "duplicate") { toast("REG sudah terdaftar di server!", "warning"); delete visitors[siteKey]; secureSave(); return; }  
+        if (result.status !== "success") addToQueue("register", reg, data);  
+        toast(`✅ ${nama} terdaftar (${reg})`, "success");  
+        vibrate();
+        generateQRandShow(reg, data);  
+        document.getElementById("regName").value = "";  
+        document.getElementById("regCompany").value = "";  
+        document.getElementById("regPic").value = "";  
+        document.getElementById("regDept").value = "";  
+        document.getElementById("regPhotoFile").value = "";  
+        document.getElementById("previewPhotoThumb").src = "";  
+        renderDashboard();  
+        renderLogTable();  
+        secureSave();  
+        await pullFromSheet();  
+    } catch (e) {  
+        console.error("generateQRBtn error:", e);  
+        toast("Terjadi kesalahan", "error");  
+    } finally {  
+        actionMutex = false;  
+        lockUI(false);
+    }  
+};  
+
+document.getElementById("walkinBtn").onclick = async () => {  
+    if (actionMutex) return;  
+    actionMutex = true;  
+    lockUI(true);
+    try {  
+        let reg = generateReg();  
+        let now = new Date();  
+        let exp = new Date(now);  
+        exp.setDate(exp.getDate() + 1);  
+        let walkData = { nama: `WALK-IN ${now.toLocaleString()}`, perusahaan: "Guest Visitor", kategori: "UMUM", tujuan: "Immediate Visit", pic: "Reception", dept: "Umum", startDate: now.toISOString().slice(0, 10), expDate: exp.toISOString().slice(0, 10), foto: "", sessions: [], currentStatus: "OUT", updatedAt: Date.now() };  
+        let siteKey = SITE_ID + "_" + reg;  
+        visitors[siteKey] = walkData;  
+        addLocalLog(reg, "WALK-IN");  
+        let result = await walkinVisitor(reg, walkData);  
+        if (result.status === "duplicate") { toast("REG sudah terdaftar!", "warning"); delete visitors[siteKey]; secureSave(); return; }  
+        if (result.status !== "success") addToQueue("walkin", reg, walkData);  
+        toast(`Walk-in registered ${reg}`, "success");  
+        vibrate();
+        generateQRandShow(reg, walkData);  
+        renderDashboard();  
+        renderLogTable();  
+        secureSave();  
+        await pullFromSheet();  
+    } catch (e) {  
+        console.error("walkinBtn error:", e);  
+        toast("Terjadi kesalahan", "error");  
+    } finally {  
+        actionMutex = false;  
+        lockUI(false);
+    }  
+};  
+
+document.getElementById("startCamBtn").onclick = async () => { document.getElementById("cameraPreview").innerHTML = ""; await stopScanner(); if (scannerInstance) { try { await scannerInstance.clear(); } catch(e) { console.error("clear error:", e); } scannerInstance = null; } await startScanner(); };  
+document.getElementById("stopCamBtn").onclick = async () => { await stopScanner(); if (scannerInstance) { try { await scannerInstance.clear(); } catch(e) { console.error("clear error:", e); } scannerInstance = null; } toast("Kamera berhenti", "info"); };  
+document.getElementById("uploadQrBtn").onclick = () => document.getElementById("uploadQrFile")?.click();  
+document.getElementById("uploadQrFile").onchange = async (e) => {  
+    if (actionMutex) return;  
+    actionMutex = true;  
+    lockUI(true);
+    try {  
+        let file = e.target.files[0];  
+        if (!file) return;  
+        try {  
+            let url = URL.createObjectURL(file);  
+            let img = new Image();  
+            img.src = url;  
+            await img.decode();  
+            URL.revokeObjectURL(url);  
+            let canvas = document.createElement("canvas");  
+            canvas.width = img.width;  
+            canvas.height = img.height;  
+            canvas.getContext("2d").drawImage(img, 0, 0);  
+            let scanner = new Html5Qrcode("temp-reader");  
+            let decoded = await scanner.scanImage(canvas, { qrbox: { width: img.width, height: img.height } });  
+            await processScan(decoded);  
+            await scanner.clear();  
+            document.getElementById("temp-reader").innerHTML = "";  
+        } catch (err) { toast("QR tidak terbaca", "error"); console.error("upload QR error:", err); }  
+    } catch (e) {  
+        console.error("uploadQrFile error:", e);  
+    } finally {  
+        actionMutex = false;  
+        lockUI(false);
+    }  
+};  
+document.getElementById("manualProcess").onclick = async () => {  
+    if (actionMutex) return;  
+    actionMutex = true;  
+    lockUI(true);
+    try {  
+        let reg = document.getElementById("manualReg").value.trim();  
+        const mode = document.getElementById("scanMode").value;  
+        let siteKey = SITE_ID + "_" + reg;  
+        let visitor = visitors[siteKey];  
+        if (!visitor) { toast("REG tidak ditemukan", "error"); return; }  
+        let expDate = visitor.expDate ? new Date(visitor.expDate) : null;
+        if (expDate && !isNaN(expDate.getTime())) {
+            expDate.setHours(23, 59, 59, 999);
+            if (expDate < new Date()) {
+                toast("QR sudah expired", "error");
+                return;
+            }
+        } else {
+            console.warn("Exp fallback for manual:", reg);
+        }
+        if (mode === "CHECK_IN") {
+            let hasOpen = visitor.sessions?.some(s => !s.checkOut);
+            if (hasOpen) {
+                toast("Sudah check-in!", "warning");
+                return;
+            }
+            let result = await checkinVisitor(reg);
+            if (result.status === "success") {
+                if (!visitor.sessions) visitor.sessions = [];
+                visitor.sessions.push({ checkIn: Date.now(), checkOut: null });
+                visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now() };
+                addLocalLog(reg, "CHECK_IN");
+                vibrate();
+                toast(`Check-in ${visitor.nama} success`, "success");
+            } else {
+                addToQueue("checkin", reg);
+                toast("Masuk queue", "warning");
+            }
         } else {
             let openSession = visitor.sessions?.find(s => !s.checkOut);
             if (!openSession) {
-                toast("Tidak ada sesi CHECK-IN aktif!", "warning");
-                return false;
-            }
-            openSession.checkOut = Date.now();
-            visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now() };
-            addLocalLog(reg, "CHECK_OUT");
-            let result = await checkoutVisitor(reg);
-            if (result.status !== "success") addToQueue("checkout", reg);
-            toast(`✅ CHECK-OUT ${visitor.nama} berhasil`, "success");
-        }
-        renderDashboard();
-        renderLogTable();
-        secureSave();
-        return true;
-    } finally {
-        setTimeout(() => processingRegs.delete(reg), 1000);
-    }
-}
-
-// ==================== GENERATE QR WITH IMAGE (HARD FALLBACK) ====================
-async function generateQRandShow(reg, data) {
-    let result = await generateQRCode(reg, data.nama, data.perusahaan, data.expDate);
-
-    let qrData = reg;
-
-    if (result.status === "success" && result.data) {
-        qrData = result.data;
-    }
-
-    // 🔥 HARD FALLBACK QR GENERATION
-    let qrImage;
-    try {
-        qrImage = await QRCode.toDataURL(qrData, { width: 200 });
-    } catch (e) {
-        console.error("QR FAIL:", e);
-        try {
-            qrImage = await QRCode.toDataURL(reg, { width: 200 });
-        } catch (e2) {
-            console.error("QR FALLBACK FAIL:", e2);
-            qrImage = null;
-        }
-    }
-
-    showPreviewWithQR(reg, data, qrImage);
-}
-
-function showPreviewWithQR(reg, data, qrImage) {
-    // 🔥 VALIDATOR sebelum PDF
-    if (!qrImage || !qrImage.startsWith("data:image")) {
-        toast("QR gagal dibuat, ulangi!", "error");
-        return;
-    }
-    
-    let modal = document.createElement("div");
-    modal.className = "modal-overlay";
-    
-    let qrHtml = `<img class="qr-preview" src="${qrImage}">`;
-    modal.innerHTML = `
-        <div class="modal-card">
-            <h3>📄 Preview Invitation</h3>
-            <div style="background:#f8fafc; padding:14px; border-radius:20px; margin-bottom:16px;">
-                <p><strong>Name</strong> : ${data.nama}</p>
-                <p><strong>Company</strong> : ${data.perusahaan}</p>
-                <p><strong>Purpose</strong> : ${data.tujuan}</p>
-                <p><strong>PIC</strong> : ${data.pic}</p>
-                <p><strong>Department</strong> : ${data.dept}</p>
-                <p><strong>Validity</strong> : ${data.startDate} → ${data.expDate}</p>
-                <p><strong>REG</strong> : ${reg}</p>
-            </div>
-            ${qrHtml}
-            <div class="flex-btns">
-                <button id="previewDownloadBtn">Download PDF</button>
-                <button id="previewCloseBtn" class="btn-outline">Close</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(modal);
-    setTimeout(() => modal.classList.add("active"), 10);
-    
-    let downloadBtn = modal.querySelector("#previewDownloadBtn");
-    let closeBtn = modal.querySelector("#previewCloseBtn");
-    
-    if (downloadBtn) {
-        downloadBtn.onclick = async () => {
-            if (window.downloading) return;
-            window.downloading = true;
-            
-            // 🔥 Hard delay + validator sebelum PDF
-            if (!qrImage || !qrImage.startsWith("data:image")) {
-                toast("QR belum siap, tunggu...", "warning");
-                window.downloading = false;
+                toast("Tidak ada sesi aktif", "warning");
                 return;
             }
-            
-            await new Promise(r => setTimeout(r, 200));
-            
-            data.qrImage = qrImage;
-            await downloadPDF(reg, data);
-            window.downloading = false;
-            modal.remove();
-        };
-    }
-    if (closeBtn) closeBtn.onclick = () => modal.remove();
-}
-
-// ==================== PDF WITH QR & PHOTO ====================
-async function downloadPDF(reg, data) {
-    try {
-        await ensureJSPDF();
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-        doc.setFillColor(31, 78, 74);
-        doc.rect(0, 0, 210, 40, "F");
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(22);
-        doc.text("INVITATION LETTER", 105, 20, { align: "center" });
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(12);
-        doc.setFont(undefined, "bold");
-        doc.text("VISITOR INFORMATION", 20, 60);
-        let y = 75;
-        doc.setFontSize(10);
-        doc.setFont(undefined, "normal");
-        doc.text(`Name : ${data.nama || "-"}`, 20, y); y += 8;
-        doc.text(`Company : ${data.perusahaan || "-"}`, 20, y); y += 8;
-        doc.text(`Purpose : ${data.tujuan || "-"}`, 20, y); y += 8;
-        doc.text(`PIC : ${data.pic || "-"}`, 20, y); y += 8;
-        doc.text(`Department : ${data.dept || "-"}`, 20, y); y += 8;
-        doc.text(`REG Number : ${reg}`, 20, y); y += 8;
-        doc.text(`Start Date : ${data.startDate || "-"}`, 20, y); y += 8;
-        doc.text(`Expired Date : ${data.expDate || "-"}`, 20, y); y += 8;
-        doc.text(`Status : ${data.currentStatus === "IN" ? "IN (Inside Area)" : "OUT"}`, 20, y);
-        
-        // QR CODE - dengan validasi
-        if (data.qrImage && data.qrImage.startsWith("data:image")) {
-            try {
-                doc.addImage(data.qrImage, "PNG", 140, 60, 40, 40);
-            } catch (e) { console.warn("QR PDF error:", e); }
-        }
-        
-        // PHOTO
-        if (data.foto && data.foto.startsWith("data:image")) {
-            try {
-                let fotoLower = data.foto.toLowerCase();
-                let format = fotoLower.includes("png") ? "PNG" : "JPEG";
-                doc.addImage(data.foto, format, 140, 130, 40, 40);
-            } catch (e) { console.warn("Photo PDF error:", e); }
-        }
-        
-        let blob = doc.output("blob");
-        let url = URL.createObjectURL(blob);
-        let a = document.createElement("a");
-        a.href = url;
-        a.download = `INVITATION_${reg}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 3000);
-        toast(`PDF ${reg} berhasil di download`, "success");
-        return true;
-    } catch (err) {
-        console.error("PDF Error:", err);
-        toast("Error saat generate PDF", "error");
-        return false;
-    }
-}
-
-async function ensureJSPDF() {
-    if (window.jspdf) return true;
-    return new Promise(resolve => {
-        let i = 0, iv = setInterval(() => {
-            if (window.jspdf) { clearInterval(iv); resolve(true); }
-            if (i++ > 100) { clearInterval(iv); resolve(false); }
-        }, 100);
-    });
-}
-
-function showPreview(reg, data) { generateQRandShow(reg, data); }
-
-// ==================== SCANNER ====================
-async function initScanner() {
-    if (scannerInstance) {
-        await stopScanner();
-        try { await scannerInstance.clear(); } catch(e) {}
-        scannerInstance = null;
-    }
-    try {
-        let cameras = await Html5Qrcode.getCameras();
-        if (!cameras || cameras.length === 0) {
-            toast("Tidak ada kamera terdeteksi", "error");
-            return false;
-        }
-        currentCameraId = cameras[0].id;
-        scannerInstance = new Html5Qrcode("cameraPreview");
-        return true;
-    } catch (err) {
-        toast("Gagal inisialisasi kamera", "error");
-        return false;
-    }
-}
-
-async function startScanner() {
-    if (isScanning) return;
-    if (!scannerInstance) {
-        let init = await initScanner();
-        if (!init) return;
-    }
-    try {
-        await scannerInstance.start(currentCameraId, { fps: 10, qrbox: { width: 280, height: 280 }, aspectRatio: 1.0 },
-            async (decodedText) => { if (!processingRegs.has(decodedText)) await processScan(decodedText); },
-            (error) => { if (error && !error.includes("No MultiFormat Readers")) console.log(error); }
-        );
-        isScanning = true;
-        toast("Scanner siap", "success");
-        
-        if (cameraResetInterval) clearInterval(cameraResetInterval);
-        cameraResetInterval = setTimeout(async () => {
-            if (isScanning) {
-                console.log("Auto-reset scanner for stability");
-                await stopScanner();
-                await startScanner();
+            let result = await checkoutVisitor(reg);
+            if (result.status === "success") {
+                openSession.checkOut = Date.now();
+                visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now() };
+                addLocalLog(reg, "CHECK_OUT");
+                vibrate();
+                toast(`Check-out ${visitor.nama} success`, "success");
+            } else {
+                addToQueue("checkout", reg);
+                toast("Masuk queue", "warning");
             }
-        }, 60000);
-    } catch (err) {
-        toast("Gagal start kamera: " + err.message, "error");
-        isScanning = false;
-    }
-}
+        }
+        renderDashboard();  
+        renderLogTable();  
+        secureSave();  
+        await pullFromSheet();  
+    } catch (e) {  
+        console.error("manualProcess error:", e);  
+        toast("Terjadi kesalahan", "error");  
+    } finally {  
+        actionMutex = false;  
+        lockUI(false);
+    }  
+};  
 
-async function stopScanner() {
-    if (cameraResetInterval) {
-        clearTimeout(cameraResetInterval);
-        cameraResetInterval = null;
-    }
-    if (scannerInstance && isScanning) {
-        try { await scannerInstance.stop(); await scannerInstance.clear(); } catch (err) {}
-    }
-    isScanning = false;
-}
+document.getElementById("refreshLogsBtn").onclick = () => { pullFromSheet(); renderLogTable(); };  
+document.getElementById("selectAllBtn").onclick = () => document.querySelectorAll(".logCheckItem").forEach(c => c.checked = true);  
+document.getElementById("deselectAllBtn").onclick = () => document.querySelectorAll(".logCheckItem").forEach(c => c.checked = false);  
+document.getElementById("deleteSelectedBtn").onclick = () => {  
+    let regs = [...new Set([...document.querySelectorAll(".logCheckItem:checked")].map(c => c.dataset.reg))];  
+    regs.forEach(r => delete visitors[SITE_ID + "_" + r]);  
+    logs = logs.filter(l => !regs.includes(l.reg));  
+    secureSave();  
+    renderDashboard();  
+    renderLogTable();  
+    toast(`Deleted ${regs.length} records`, "success");  
+};  
+document.getElementById("deleteAllBtn").onclick = () => { visitors = {}; logs = []; secureSave(); renderDashboard(); renderLogTable(); toast("All data cleared", "info"); };  
+document.getElementById("backupAction").onclick = () => { try { let a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify({ visitors, logs })], { type: "application/json" })); a.download = `vms_backup_${Date.now()}.json`; a.click(); toast("Backup ready", "success"); } catch (e) { toast("Backup gagal", "error"); console.error("backup error:", e); } };  
+document.getElementById("resetDatabaseAction").onclick = () => { visitors = {}; logs = []; secureSave(); renderDashboard(); renderLogTable(); toast("Database reset", "info"); };  
+document.getElementById("regPhotoFile").onchange = (e) => { if (e.target.files[0]) { let r = new FileReader(); r.onload = ev => { let preview = document.getElementById("previewPhotoThumb"); if (preview) preview.src = ev.target.result; }; r.readAsDataURL(e.target.files[0]); } };  
+document.getElementById("submitLicenseBtn").onclick = () => { let input = document.getElementById("licenseInput"); if (input && input.value) toast("✅ License activated", "success"); if (input) input.value = ""; };  
+document.getElementById("siteSelector").onchange = (e) => setSite(e.target.value);  
+document.getElementById("siteSelectorTop").onchange = (e) => setSite(e.target.value);  
 
-// ==================== EVENT HANDLERS ====================
-function setSite(site) {
-    SITE_ID = site;
-    localStorage.setItem("vms_site", SITE_ID);
-    
-    document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => {
-        if (sel) sel.value = site;
-    });
-    
-    vmsSite_applyToUI();
-    
-    toast(`Site aktif: ${getSiteName(SITE_ID)}`, "success");
-    renderDashboard();
-    renderLogTable();
-}
+function exportToExcel() {  
+    try {  
+        if (!window.XLSX) { toast("Excel engine belum siap", "error"); return; }  
+        let dataForExcel = [];  
+        Object.entries(visitors).forEach(([siteKey, visitor]) => {  
+            if (!siteKey.startsWith(SITE_ID + "_")) return;  
+            let reg = siteKey.replace(SITE_ID + "_", "");  
+            let jamMasuk = "-", jamKeluar = "-", durasi = "-", keterangan = "";  
+            if (visitor.sessions && visitor.sessions.length > 0) {  
+                let last = visitor.sessions[visitor.sessions.length - 1];  
+                if (last.checkIn) jamMasuk = new Date(last.checkIn).toLocaleString("id-ID");  
+                if (last.checkOut) jamKeluar = new Date(last.checkOut).toLocaleString("id-ID");  
+                if (last.checkIn && last.checkOut) durasi = Math.floor((last.checkOut - last.checkIn) / 60000) + " menit";  
+                keterangan = visitor.currentStatus === "IN" ? "Sedang di dalam" : (last.checkOut ? "Sudah check-out" : "Belum check-in");  
+            } else keterangan = "Belum pernah check-in";  
+            if (visitor.expDate && new Date(visitor.expDate) < new Date()) keterangan = "❌ EXPIRED - " + keterangan;  
+            dataForExcel.push({ "Nama": visitor.nama || "-", "Perusahaan": visitor.perusahaan || "-", "Tujuan": visitor.tujuan || "-", "PIC": visitor.pic || "-", "Start Date": visitor.startDate || "-", "Expired Date": visitor.expDate || "-", "Jam Masuk": jamMasuk, "Jam Keluar": jamKeluar, "Durasi": durasi, "Nomor Registrasi": reg, "Keterangan": keterangan });  
+        });  
+        if (dataForExcel.length === 0) { toast("Tidak ada data", "warning"); return; }  
+        let ws = XLSX.utils.json_to_sheet(dataForExcel);  
+        let wb = XLSX.utils.book_new();  
+        XLSX.utils.book_append_sheet(wb, ws, "VMS_Visitor_Report");  
+        XLSX.writeFile(wb, `VMS_Report_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.xlsx`);  
+        toast("✅ Export Excel berhasil", "success");  
+    } catch (err) { toast("Export gagal", "error"); console.error("export error:", err); }  
+}  
+document.getElementById("exportExcelAction").onclick = exportToExcel;  
 
-document.getElementById("generateQRBtn").onclick = async () => {
-    let nama = document.getElementById("regName").value;
-    let perusahaan = document.getElementById("regCompany").value;
-    let kategori = document.getElementById("regCategory").value;
-    let tujuan = document.getElementById("regPurpose").value;
-    let custom = document.getElementById("regCustomPurpose").value;
-    if (tujuan === "Lainnya") tujuan = custom || "Custom";
-    let pic = document.getElementById("regPic").value;
-    let dept = document.getElementById("regDept").value;
-    let startDate = document.getElementById("regStartDate").value || new Date().toISOString().slice(0, 10);
-    let expDate = document.getElementById("regExpDate").value;
-    if (!nama || !perusahaan || !pic || !dept || !expDate) {
-        toast("Lengkapi semua field wajib", "error");
-        return;
-    }
-    let reg = generateReg();
-    
-    let siteKey = SITE_ID + "_" + reg;
-    if (visitors[siteKey]) {
-        toast("REG sudah ada di local!", "warning");
-        return;
-    }
-    
-    let foto = "";
-    let file = document.getElementById("regPhotoFile").files[0];
-    if (file) {
-        try {
-            let reader = await new Promise(resolve => { let fr = new FileReader(); fr.onload = () => resolve(fr.result); fr.readAsDataURL(file); });
-            let img = new Image();
-            img.src = reader;
-            await new Promise(r => img.onload = r);
-            let canvas = document.createElement("canvas");
-            let maxWidth = 400;
-            let scale = maxWidth / img.width;
-            canvas.width = maxWidth;
-            canvas.height = img.height * scale;
-            let ctx = canvas.getContext("2d");
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            foto = canvas.toDataURL("image/jpeg", 0.5);
-        } catch (e) { console.warn(e); }
-    }
-    let data = { nama, perusahaan, kategori, tujuan, pic, dept, startDate, expDate, foto, sessions: [], currentStatus: "OUT", updatedAt: Date.now() };
-    visitors[siteKey] = data;
-    addLocalLog(reg, "REGISTER");
-    
-    let result = await registerVisitor(reg, data);
-    if (!result || typeof result !== "object") {
-        addToQueue("register", reg, data);
-        toast(`⚠️ ${nama} ditambahkan ke antrian`, "warning");
-        renderDashboard();
-        renderLogTable();
-        secureSave();
-        return;
-    }
-    
-    if (result.status === "duplicate") {
-        toast("REG sudah terdaftar di server!", "warning");
-        delete visitors[siteKey];
-        secureSave();
-        return;
-    }
-    if (result.status !== "success") addToQueue("register", reg, data);
-    toast(`✅ ${nama} terdaftar (${reg})`, "success");
-    generateQRandShow(reg, data);
-    document.getElementById("regName").value = "";
-    document.getElementById("regCompany").value = "";
-    document.getElementById("regPic").value = "";
-    document.getElementById("regDept").value = "";
-    document.getElementById("regPhotoFile").value = "";
-    document.getElementById("previewPhotoThumb").src = "";
-    renderDashboard();
-    renderLogTable();
-    secureSave();
-};
+let panes = { dashboard: document.getElementById("dashboardPane"), register: document.getElementById("registerPane"), scanner: document.getElementById("scannerPane"), logs: document.getElementById("logsPane") };  
+function switchTab(tabId) {  
+    Object.values(panes).forEach(p => p?.classList.remove("active-pane"));  
+    if (panes[tabId]) panes[tabId].classList.add("active-pane");  
+    document.querySelectorAll(".nav-item").forEach(nav => { if (nav.dataset?.tab === tabId) nav.classList.add("active"); else nav.classList.remove("active"); });  
+}  
+document.querySelectorAll(".nav-item, .mobile-nav").forEach(el => { if (el.dataset?.tab) { el.addEventListener("click", () => { switchTab(el.dataset.tab); if (window.innerWidth <= 780) { let mobileSidebar = document.getElementById("mobileSidebar"); let overlay = document.getElementById("overlay"); if (mobileSidebar) mobileSidebar.classList.remove("open"); if (overlay) overlay.style.display = "none"; } }); } });  
+document.getElementById("mobileMenuBtn").onclick = () => { let mobileSidebar = document.getElementById("mobileSidebar"); let overlay = document.getElementById("overlay"); if (mobileSidebar) mobileSidebar.classList.add("open"); if (overlay) overlay.style.display = "block"; };  
+document.getElementById("overlay").onclick = () => { let mobileSidebar = document.getElementById("mobileSidebar"); let overlay = document.getElementById("overlay"); if (mobileSidebar) mobileSidebar.classList.remove("open"); if (overlay) overlay.style.display = "none"; };  
 
-document.getElementById("walkinBtn").onclick = async () => {
-    let reg = generateReg();
-    let now = new Date();
-    let exp = new Date(now);
-    exp.setDate(exp.getDate() + 1);
-    let walkData = {
-        nama: `WALK-IN ${now.toLocaleString()}`, perusahaan: "Guest Visitor", kategori: "UMUM",
-        tujuan: "Immediate Visit", pic: "Reception", dept: "Umum",
-        startDate: now.toISOString().slice(0, 10), expDate: exp.toISOString().slice(0, 10),
-        foto: "", sessions: [], currentStatus: "OUT", updatedAt: Date.now()
-    };
-    let siteKey = SITE_ID + "_" + reg;
-    visitors[siteKey] = walkData;
-    addLocalLog(reg, "WALK-IN");
-    let result = await walkinVisitor(reg, walkData);
-    if (result.status === "duplicate") {
-        toast("REG sudah terdaftar!", "warning");
-        delete visitors[siteKey];
-        secureSave();
-        return;
-    }
-    if (result.status !== "success") addToQueue("walkin", reg, walkData);
-    toast(`Walk-in registered ${reg}`, "success");
-    generateQRandShow(reg, walkData);
-    renderDashboard();
-    renderLogTable();
-    secureSave();
-};
+if (window._vmsIntervals) { window._vmsIntervals.forEach(clearInterval); }  
+window._vmsIntervals = [];  
+secureLoad();  
+setSite(SITE_ID);  
+renderDashboard();  
+renderLogTable();  
+function initQueue() { try { const saved = localStorage.getItem("vms_sync_queue"); if (saved) syncQueue = JSON.parse(saved); updateQueueStatus(); } catch (e) { console.error("initQueue error:", e); } }  
+initQueue();  
+pullFromSheet();  
+let syncInterval = setInterval(() => { if (navigator.onLine) pullFromSheet(); }, SYNC_INTERVAL_MS);  
+let queueInterval = setInterval(() => { if (navigator.onLine && syncQueue.length > 0) processQueue(); }, 5000);  
+window._vmsIntervals.push(syncInterval, queueInterval);  
+window.addEventListener("beforeunload", () => { if (scannerInstance) { try { scannerInstance.stop(); scannerInstance.clear(); } catch (e) { console.error("beforeunload scanner error:", e); } } if (cameraResetInterval) clearInterval(cameraResetInterval); window._vmsIntervals.forEach(clearInterval); secureSave(); });  
 
-document.getElementById("startCamBtn").onclick = async () => {
-    let preview = document.getElementById("cameraPreview");
-    if (preview) preview.innerHTML = "";
-    await stopScanner();
-    if (scannerInstance) { try { await scannerInstance.clear(); } catch(e) {} scannerInstance = null; }
-    await startScanner();
-};
-document.getElementById("stopCamBtn").onclick = async () => {
-    await stopScanner();
-    if (scannerInstance) { try { await scannerInstance.clear(); } catch(e) {} scannerInstance = null; }
-    toast("Kamera berhenti", "info");
-};
-document.getElementById("uploadQrBtn").onclick = () => document.getElementById("uploadQrFile")?.click();
-document.getElementById("uploadQrFile").onchange = async (e) => {
-    let file = e.target.files[0];
-    if (!file) return;
-    try {
-        let url = URL.createObjectURL(file);
-        let img = new Image();
-        img.src = url;
-        await img.decode();
-        URL.revokeObjectURL(url);
-        let canvas = document.createElement("canvas");
-        canvas.width = img.width;
-        canvas.height = img.height;
-        canvas.getContext("2d").drawImage(img, 0, 0);
-        let scanner = new Html5Qrcode("temp-reader");
-        let decoded = await scanner.scanImage(canvas, { qrbox: { width: img.width, height: img.height } });
-        await processScan(decoded);
-        await scanner.clear();
-        document.getElementById("temp-reader").innerHTML = "";
-    } catch (err) { toast("QR tidak terbaca", "error"); }
-};
-document.getElementById("manualProcess").onclick = async () => {
-    let reg = document.getElementById("manualReg").value.trim();
-    let mode = document.getElementById("scanMode").value;
-    let siteKey = SITE_ID + "_" + reg;
-    let visitor = visitors[siteKey];
-    if (!visitor) { toast("REG tidak ditemukan", "error"); return; }
-    let expDate = new Date(visitor.expDate);
-    expDate.setHours(23, 59, 59, 999);
-    if (expDate < new Date()) { toast("QR sudah expired", "error"); return; }
-    if (mode === "CHECK_IN") {
-        let hasOpen = visitor.sessions?.some(s => !s.checkOut);
-        if (hasOpen) { toast("Sudah dalam keadaan CHECK-IN!", "warning"); return; }
-        if (!visitor.sessions) visitor.sessions = [];
-        visitor.sessions.push({ checkIn: Date.now(), checkOut: null });
-        visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now() };
-        addLocalLog(reg, "CHECK_IN");
-        let result = await checkinVisitor(reg);
-        if (result.status !== "success") addToQueue("checkin", reg);
-        toast(`Check-in ${visitor.nama} success`, "success");
-    } else {
-        let openSession = visitor.sessions?.find(s => !s.checkOut);
-        if (!openSession) { toast("Tidak ada sesi check-in aktif", "warning"); return; }
-        openSession.checkOut = Date.now();
-        visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now() };
-        addLocalLog(reg, "CHECK_OUT");
-        let result = await checkoutVisitor(reg);
-        if (result.status !== "success") addToQueue("checkout", reg);
-        toast(`Check-out ${visitor.nama} success`, "success");
-    }
-    renderDashboard();
-    renderLogTable();
-    secureSave();
-};
-
-document.getElementById("refreshLogsBtn").onclick = () => { pullFromSheet(); renderLogTable(); };
-document.getElementById("selectAllBtn").onclick = () => document.querySelectorAll(".logCheckItem").forEach(c => c.checked = true);
-document.getElementById("deselectAllBtn").onclick = () => document.querySelectorAll(".logCheckItem").forEach(c => c.checked = false);
-document.getElementById("deleteSelectedBtn").onclick = () => {
-    let regs = [...new Set([...document.querySelectorAll(".logCheckItem:checked")].map(c => c.dataset.reg))];
-    regs.forEach(r => delete visitors[SITE_ID + "_" + r]);
-    logs = logs.filter(l => !regs.includes(l.reg));
-    secureSave();
-    renderDashboard();
-    renderLogTable();
-    toast(`Deleted ${regs.length} records`, "success");
-};
-document.getElementById("deleteAllBtn").onclick = () => { visitors = {}; logs = []; secureSave(); renderDashboard(); renderLogTable(); toast("All data cleared", "info"); };
-document.getElementById("backupAction").onclick = () => {
-    try {
-        let a = document.createElement("a");
-        a.href = URL.createObjectURL(new Blob([JSON.stringify({ visitors, logs })], { type: "application/json" }));
-        a.download = `vms_backup_${Date.now()}.json`;
-        a.click();
-        toast("Backup ready", "success");
-    } catch (e) { toast("Backup gagal", "error"); }
-};
-document.getElementById("resetDatabaseAction").onclick = () => { visitors = {}; logs = []; secureSave(); renderDashboard(); renderLogTable(); toast("Database reset", "info"); };
-document.getElementById("regPhotoFile").onchange = (e) => {
-    if (e.target.files[0]) {
-        let r = new FileReader();
-        r.onload = ev => { let preview = document.getElementById("previewPhotoThumb"); if (preview) preview.src = ev.target.result; };
-        r.readAsDataURL(e.target.files[0]);
-    }
-};
-document.getElementById("submitLicenseBtn").onclick = () => {
-    let input = document.getElementById("licenseInput");
-    if (input && input.value) toast("✅ License activated", "success");
-    if (input) input.value = "";
-};
-document.getElementById("siteSelector").onchange = (e) => setSite(e.target.value);
-document.getElementById("siteSelectorTop").onchange = (e) => setSite(e.target.value);
-
-function exportToExcel() {
-    try {
-        if (!window.XLSX) { toast("Excel engine belum siap", "error"); return; }
-        let dataForExcel = [];
-        Object.entries(visitors).forEach(([siteKey, visitor]) => {
-            if (!siteKey.startsWith(SITE_ID + "_")) return;
-            let reg = siteKey.replace(SITE_ID + "_", "");
-            let jamMasuk = "-", jamKeluar = "-", durasi = "-", keterangan = "";
-            if (visitor.sessions && visitor.sessions.length > 0) {
-                let last = visitor.sessions[visitor.sessions.length - 1];
-                if (last.checkIn) jamMasuk = new Date(last.checkIn).toLocaleString("id-ID");
-                if (last.checkOut) jamKeluar = new Date(last.checkOut).toLocaleString("id-ID");
-                if (last.checkIn && last.checkOut) durasi = Math.floor((last.checkOut - last.checkIn) / 60000) + " menit";
-                keterangan = visitor.currentStatus === "IN" ? "Sedang di dalam" : (last.checkOut ? "Sudah check-out" : "Belum check-in");
-            } else keterangan = "Belum pernah check-in";
-            if (visitor.expDate && new Date(visitor.expDate) < new Date()) keterangan = "❌ EXPIRED - " + keterangan;
-            dataForExcel.push({
-                "Nama": visitor.nama || "-", "Perusahaan": visitor.perusahaan || "-", "Tujuan": visitor.tujuan || "-",
-                "PIC": visitor.pic || "-", "Start Date": visitor.startDate || "-", "Expired Date": visitor.expDate || "-",
-                "Jam Masuk": jamMasuk, "Jam Keluar": jamKeluar, "Durasi": durasi, "Nomor Registrasi": reg, "Keterangan": keterangan
-            });
-        });
-        if (dataForExcel.length === 0) { toast("Tidak ada data", "warning"); return; }
-        let ws = XLSX.utils.json_to_sheet(dataForExcel);
-        let wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "VMS_Visitor_Report");
-        XLSX.writeFile(wb, `VMS_Report_${new Date().toISOString().slice(0, 19).replace(/:/g, "-")}.xlsx`);
-        toast("✅ Export Excel berhasil", "success");
-    } catch (err) { toast("Export gagal", "error"); }
-}
-document.getElementById("exportExcelAction").onclick = exportToExcel;
-
-// ==================== TAB NAVIGATION ====================
-let panes = {
-    dashboard: document.getElementById("dashboardPane"),
-    register: document.getElementById("registerPane"),
-    scanner: document.getElementById("scannerPane"),
-    logs: document.getElementById("logsPane")
-};
-function switchTab(tabId) {
-    Object.values(panes).forEach(p => p?.classList.remove("active-pane"));
-    if (panes[tabId]) panes[tabId].classList.add("active-pane");
-    document.querySelectorAll(".nav-item").forEach(nav => {
-        if (nav.dataset?.tab === tabId) nav.classList.add("active");
-        else nav.classList.remove("active");
-    });
-}
-document.querySelectorAll(".nav-item, .mobile-nav").forEach(el => {
-    if (el.dataset?.tab) {
-        el.addEventListener("click", () => {
-            switchTab(el.dataset.tab);
-            if (window.innerWidth <= 780) {
-                let mobileSidebar = document.getElementById("mobileSidebar");
-                let overlay = document.getElementById("overlay");
-                if (mobileSidebar) mobileSidebar.classList.remove("open");
-                if (overlay) overlay.style.display = "none";
-            }
-        });
-    }
-});
-document.getElementById("mobileMenuBtn").onclick = () => {
-    let mobileSidebar = document.getElementById("mobileSidebar");
-    let overlay = document.getElementById("overlay");
-    if (mobileSidebar) mobileSidebar.classList.add("open");
-    if (overlay) overlay.style.display = "block";
-};
-document.getElementById("overlay").onclick = () => {
-    let mobileSidebar = document.getElementById("mobileSidebar");
-    let overlay = document.getElementById("overlay");
-    if (mobileSidebar) mobileSidebar.classList.remove("open");
-    if (overlay) overlay.style.display = "none";
-};
-
-// ==================== INITIALIZATION ====================
-if (window._vmsIntervals) { window._vmsIntervals.forEach(clearInterval); }
-window._vmsIntervals = [];
-
-secureLoad();
-setSite(SITE_ID);
-renderDashboard();
-renderLogTable();
-
-function initQueue() {
-    try { const saved = localStorage.getItem("vms_sync_queue"); if (saved) syncQueue = JSON.parse(saved); updateQueueStatus(); } catch (e) {}
-}
-initQueue();
-
-pullFromSheet();
-
-let syncInterval = setInterval(() => { if (navigator.onLine) pullFromSheet(); }, SYNC_INTERVAL_MS);
-let queueInterval = setInterval(() => { if (navigator.onLine && syncQueue.length > 0) processQueue(); }, 5000);
-window._vmsIntervals.push(syncInterval, queueInterval);
-
-window.addEventListener("beforeunload", () => {
-    if (scannerInstance) { try { scannerInstance.stop(); scannerInstance.clear(); } catch (e) {} }
-    if (cameraResetInterval) clearTimeout(cameraResetInterval);
-    window._vmsIntervals.forEach(clearInterval);
-    secureSave();
-});
-
-// ==================== SITE RENAME ====================
-let vmsSiteData = { names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" } };
-function vmsSite_load() { try { let stored = localStorage.getItem("vms_site_names"); if (stored) Object.assign(vmsSiteData.names, JSON.parse(stored)); } catch(e) {} vmsSite_applyToUI(); }
-function vmsSite_applyToUI() {
-    document.querySelectorAll("[data-site]").forEach(el => { let k = el.getAttribute("data-site"); if (vmsSiteData.names[k]) el.innerText = vmsSiteData.names[k]; });
-    document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => {
-        if (!sel) return;
-        Array.from(sel.options).forEach(opt => {
-            let val = opt.value;
-            let siteNames = {};
-            try { siteNames = JSON.parse(localStorage.getItem("vms_site_names") || "{}"); } catch(e) {}
-            if (siteNames[val]) {
-                let icon = opt.textContent.substring(0, 2);
-                let hasIcon = icon === "🏭" || icon === "🏢" || icon === "🏬";
-                opt.textContent = (hasIcon ? icon + " " : "") + siteNames[val];
-            }
-        });
-    });
-}
-function vmsSite_save() { localStorage.setItem("vms_site_names", JSON.stringify(vmsSiteData.names)); return true; }
-function vmsSite_open() { let modal = document.getElementById("vmsSiteModal"); if (modal) { modal.style.display = "flex"; let vmsA = document.getElementById("vmsA"); if (vmsA) vmsA.value = vmsSiteData.names.SITE_A || "SITE A"; let vmsB = document.getElementById("vmsB"); if (vmsB) vmsB.value = vmsSiteData.names.SITE_B || "SITE B"; let vmsC = document.getElementById("vmsC"); if (vmsC) vmsC.value = vmsSiteData.names.SITE_C || "SITE C"; } }
-function vmsSite_close() { let modal = document.getElementById("vmsSiteModal"); if (modal) modal.style.display = "none"; }
-function vmsSite_submit() {
-    let vmsA = document.getElementById("vmsA");
-    let vmsB = document.getElementById("vmsB");
-    let vmsC = document.getElementById("vmsC");
-    let newNames = { ...vmsSiteData.names };
-    if (vmsA) newNames.SITE_A = vmsA.value.trim() || "SITE A";
-    if (vmsB) newNames.SITE_B = vmsB.value.trim() || "SITE B";
-    if (vmsC) newNames.SITE_C = vmsC.value.trim() || "SITE C";
-    vmsSiteData.names = newNames;
-    localStorage.setItem("vms_site_names", JSON.stringify(vmsSiteData.names));
-    vmsSite_applyToUI();
-    if (typeof toast === "function") toast("✅ Site names saved!", "success");
-    vmsSite_close();
-}
-vmsSite_load();
+let vmsSiteData = { names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" } };  
+function vmsSite_load() { try { let stored = localStorage.getItem("vms_site_names"); if (stored) Object.assign(vmsSiteData.names, JSON.parse(stored)); } catch(e) { console.error("vmsSite_load error:", e); } vmsSite_applyToUI(); }  
+function vmsSite_applyToUI() {  
+    document.querySelectorAll("[data-site]").forEach(el => { let k = el.getAttribute("data-site"); if (vmsSiteData.names[k]) el.innerText = vmsSiteData.names[k]; });  
+    document.querySelectorAll("#siteSelector, #siteSelectorTop").forEach(sel => { if (!sel) return; Array.from(sel.options).forEach(opt => { let val = opt.value; let siteNames = {}; try { siteNames = JSON.parse(localStorage.getItem("vms_site_names") || "{}"); } catch(e) { console.error("parse error:", e); } if (siteNames[val]) { let icon = opt.textContent.substring(0, 2); let hasIcon = icon === "🏭" || icon === "🏢" || icon === "🏬"; opt.textContent = (hasIcon ? icon + " " : "") + siteNames[val]; } }); });  
+}  
+function vmsSite_save() { localStorage.setItem("vms_site_names", JSON.stringify(vmsSiteData.names)); return true; }  
+function vmsSite_open() { let modal = document.getElementById("vmsSiteModal"); if (modal) { modal.style.display = "flex"; let vmsA = document.getElementById("vmsA"); if (vmsA) vmsA.value = vmsSiteData.names.SITE_A || "SITE A"; let vmsB = document.getElementById("vmsB"); if (vmsB) vmsB.value = vmsSiteData.names.SITE_B || "SITE B"; let vmsC = document.getElementById("vmsC"); if (vmsC) vmsC.value = vmsSiteData.names.SITE_C || "SITE C"; } }  
+function vmsSite_close() { let modal = document.getElementById("vmsSiteModal"); if (modal) modal.style.display = "none"; }  
+function vmsSite_submit() {  
+    let vmsA = document.getElementById("vmsA");  
+    let vmsB = document.getElementById("vmsB");  
+    let vmsC = document.getElementById("vmsC");  
+    let newNames = { ...vmsSiteData.names };  
+    if (vmsA) newNames.SITE_A = vmsA.value.trim() || "SITE A";  
+    if (vmsB) newNames.SITE_B = vmsB.value.trim() || "SITE B";  
+    if (vmsC) newNames.SITE_C = vmsC.value.trim() || "SITE C";  
+    vmsSiteData.names = newNames;  
+    localStorage.setItem("vms_site_names", JSON.stringify(vmsSiteData.names));  
+    vmsSite_applyToUI();  
+    if (typeof toast === "function") toast("✅ Site names saved!", "success");  
+    vmsSite_close();  
+}  
+vmsSite_load();  
 </script>
 </body>
 </html>
