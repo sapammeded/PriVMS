@@ -168,11 +168,11 @@
             <div class="card"><div class="card-header"><h3>⏰ Recent Checkouts</h3></div><div class="table-wrapper"><table id="expiringTable"><thead><tr><th>Company</th><th>Device Name</th><th>Checkout</th><th>Status</th></tr></thead><tbody></tbody></table></div></div>
         </div>
 
-        <div id="companiesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>🏢 All Companies</h3><div><input type="text" id="companySearch" placeholder="Search company..." style="width: 200px;"><button class="btn btn-info btn-sm" id="exportCompaniesExcelBtn">📊 Export Excel</button><button class="btn btn-primary btn-sm" id="exportCompaniesPdfBtn">📄 Export PDF</button></div></div><div class="table-wrapper"><table id="companiesTable"><thead><tr><th>Company</th><th>Device Name</th><th>PIC</th><th>Expiry</th><th>Status</th></tr></thead><tbody></tbody></td></div></div></div>
+        <div id="companiesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>🏢 Registered Companies</h3><div><input type="text" id="companySearch" placeholder="Search company..." style="width: 200px;"><button class="btn btn-info btn-sm" id="exportCompaniesExcelBtn">📊 Export Excel</button><button class="btn btn-primary btn-sm" id="exportCompaniesPdfBtn">📄 Export PDF</button><button class="btn btn-outline btn-sm" id="refreshCompaniesBtn">🔄 Refresh</button></div></div><div class="table-wrapper"><table id="companiesTable"><thead><tr><th>Company</th><th>PIC</th><th>Phone</th><th>Email</th><th>Package</th><th>License Key</th><th>Expiry</th><th>Status</th></tr></thead><tbody id="companiesTableBody"></tbody></table></div></div></div>
 
-        <div id="devicesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>📱 All Devices</h3><div><input type="text" id="deviceSearch" placeholder="Search device/company..." style="width: 220px;"><select id="deviceStatusFilter" style="width: 140px;"><option value="">All Status</option><option value="IN">IN</option><option value="OUT">OUT</option></select><button class="btn btn-info btn-sm" id="exportDevicesExcelBtn">📊 Export</button><button class="btn btn-primary btn-sm" id="exportDevicesPdfBtn">📄 PDF</button></div></div><div class="table-wrapper"><table id="devicesTable"><thead><tr><th>Device Name</th><th>Company</th><th>PIC</th><th>Check-in</th><th>Checkout</th><th>Status</th><th>Alert</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div id="devicesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>📱 All Devices (Visitor Check-in)</h3><div><input type="text" id="deviceSearch" placeholder="Search device/company..." style="width: 220px;"><select id="deviceStatusFilter" style="width: 140px;"><option value="">All Status</option><option value="IN">IN</option><option value="OUT">OUT</option></select><button class="btn btn-info btn-sm" id="exportDevicesExcelBtn">📊 Export</button><button class="btn btn-primary btn-sm" id="exportDevicesPdfBtn">📄 PDF</button></div></div><div class="table-wrapper"><table id="devicesTable"><thead><tr><th>Device Name</th><th>Company</th><th>PIC</th><th>Check-in</th><th>Checkout</th><th>Status</th><th>Alert</th></tr></thead><tbody></tbody></table></div></div></div>
 
-        <div id="violationsTab" class="tab-pane"><div class="card"><div class="card-header"><h3>⚠️ Overstay Violations</h3><div><input type="text" id="violationSearch" placeholder="Search..."><button class="btn btn-danger btn-sm" id="clearViolationsBtn">🗑️ Clear All</button></div></div><div class="table-wrapper"><table id="violationsTable"><thead><tr><th>Company</th><th>Device</th><th>Violation Type</th><th>Details</th><th>Time</th></tr></thead><tbody></tbody></td></div></div></div>
+        <div id="violationsTab" class="tab-pane"><div class="card"><div class="card-header"><h3>⚠️ Overstay Violations</h3><div><input type="text" id="violationSearch" placeholder="Search..."><button class="btn btn-danger btn-sm" id="clearViolationsBtn">🗑️ Clear All</button></div></div><div class="table-wrapper"><table id="violationsTable"><thead><tr><th>Company</th><th>Device</th><th>Violation Type</th><th>Details</th><th>Time</th></tr></thead><tbody></tbody><tr></div></div></div>
 
         <div id="requestsTab" class="tab-pane"><div class="card"><div class="card-header"><h3>📝 Pending Approvals</h3><span id="pendingCount" class="badge badge-warning">0</span></div><div class="table-wrapper"><table id="requestsTable"><thead><tr><th>Company</th><th>Device ID</th><th>Device Name</th><th>Requested At</th><th>Actions</th></tr></thead><tbody></tbody></table></div></div></div>
 
@@ -195,7 +195,7 @@
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfyJdAl6aLC35vLN1ES9QA19Kx8rlVXx0Yc9pBNFLKkixEmYF4gSVO50yhoZkdTvPeMw/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxI0gyyW2RfnH-trh25pna11czhUZOEobDA2jdiXlECyOTp1_LGrL7xxl_v5DsF1NQ6/exec";
 const SESSION_TIMEOUT_MS = 43200000;
 
 let currentUser = null;
@@ -345,7 +345,6 @@ async function loadAllData() {
         });
         updateDashboard();
         renderDevicesTable();
-        renderCompaniesTable();
         renderRecentViolations();
         updateCharts();
         extendSession();
@@ -364,6 +363,7 @@ async function loadLicenses() {
         if (data.status === "success") {
             licensesData = data.data || [];
             renderLicensesTable();
+            renderCompaniesTable();
         }
     } catch (err) {
         console.error("LOAD LICENSES ERROR:", err);
@@ -506,21 +506,36 @@ function renderDevicesTable() {
     `).join('');
 }
 
+// FIX: Companies Table membaca dari licensesData (bukan devicesData)
 function renderCompaniesTable() {
-    const tbody = document.querySelector("#companiesTable tbody");
+    const tbody = document.getElementById("companiesTableBody");
     if (!tbody) return;
     const search = document.getElementById("companySearch")?.value.toLowerCase() || "";
-    const unique = devicesData.filter((v, i, a) => a.findIndex(t => t.company === v.company) === i);
-    const filtered = unique.filter(d => (d.company || "").toLowerCase().includes(search));
-    tbody.innerHTML = filtered.map(d => `
-        <tr>
-            <td><strong>${escapeHtml(d.company)}</strong></td>
-            <td>${escapeHtml(d.name)}</td>
-            <td>${escapeHtml(d.pic)}</td>
-            <td>${escapeHtml(d.exp)}</td>
-            <td><span class="badge ${d.isExpired ? 'badge-expired' : 'badge-active'}">${d.isExpired ? 'EXPIRED' : 'ACTIVE'}</span></td>
-        </tr>
-    `).join('');
+    let filtered = licensesData.filter(l => (l.company || "").toLowerCase().includes(search));
+    
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-muted">No registered companies. Generate license first.</td></tr>`;
+        return;
+    }
+    
+    tbody.innerHTML = filtered.map(l => {
+        let isExpired = false;
+        try {
+            isExpired = new Date(l.expiry) < new Date();
+        } catch(e) {}
+        return `
+            <tr>
+                <td><strong>${escapeHtml(l.company)}</strong></td>
+                <td>${escapeHtml(l.pic)}</                <td>${escapeHtml(l.pic)}</td>
+                <td>${escapeHtml(l.phone || '-')}</td>
+                <td>${escapeHtml(l.email || '-')}</td>
+                <td><span class="badge ${l.package === 'PRO' ? 'badge-pro' : (l.package === 'BASIC' ? 'badge-basic' : 'badge-demo')}">${escapeHtml(l.package)}</span></td>
+                <td><code>${escapeHtml(l.license_key)}</code></td>
+                <td class="${isExpired ? 'text-danger' : ''}">${escapeHtml(l.expiry)}</td>
+                <td><span class="badge ${l.status === 'ACTIVE' ? 'badge-active' : 'badge-expired'}">${escapeHtml(l.status)}</span></td>
+            </tr>
+        `;
+    }).join('');
 }
 
 function renderRecentViolations() {
@@ -585,6 +600,7 @@ function switchTab(tabId) {
 }
 
 function refreshData() { loadAllData(); loadLicenses(); }
+function refreshCompanies() { loadLicenses(); }
 
 function openChangePasswordModal() {
     document.getElementById("changePasswordModal").style.display = "flex";
@@ -702,14 +718,12 @@ function exportDevicesToPDF() {
     exportToPDF(exportData, "Devices_Report", ["Name", "Company", "PIC", "Checkin", "Checkout", "Status", "Alert"]);
 }
 function exportCompaniesToExcel() {
-    const unique = devicesData.filter((v, i, a) => a.findIndex(t => t.company === v.company) === i);
-    const exportData = unique.map(d => ({ Company: d.company, DeviceName: d.name, PIC: d.pic, Expiry: d.exp, Status: d.isExpired ? 'EXPIRED' : 'ACTIVE' }));
-    exportToExcel(exportData, "Companies", ["Company", "DeviceName", "PIC", "Expiry", "Status"]);
+    const exportData = licensesData.map(l => ({ Company: l.company, PIC: l.pic, Phone: l.phone, Email: l.email, Package: l.package, LicenseKey: l.license_key, Expiry: l.expiry, Status: l.status }));
+    exportToExcel(exportData, "Companies", ["Company", "PIC", "Phone", "Email", "Package", "LicenseKey", "Expiry", "Status"]);
 }
 function exportCompaniesToPDF() {
-    const unique = devicesData.filter((v, i, a) => a.findIndex(t => t.company === v.company) === i);
-    const exportData = unique.map(d => ({ Company: d.company, DeviceName: d.name, PIC: d.pic, Expiry: d.exp, Status: d.isExpired ? 'EXPIRED' : 'ACTIVE' }));
-    exportToPDF(exportData, "Companies_Report", ["Company", "DeviceName", "PIC", "Expiry", "Status"]);
+    const exportData = licensesData.map(l => ({ Company: l.company, PIC: l.pic, Phone: l.phone, Email: l.email, Package: l.package, LicenseKey: l.license_key, Expiry: l.expiry, Status: l.status }));
+    exportToPDF(exportData, "Companies_Report", ["Company", "PIC", "Phone", "Email", "Package", "LicenseKey", "Expiry", "Status"]);
 }
 function exportInvoicesToExcel() {
     exportToExcel([], "Invoices", ["Invoice #", "Company", "Amount", "Status", "Created"]);
@@ -730,7 +744,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("sidebarLogoutBtn")?.addEventListener("click", logout);
     document.getElementById("deviceSearch")?.addEventListener("input", renderDevicesTable);
     document.getElementById("deviceStatusFilter")?.addEventListener("change", renderDevicesTable);
-    document.getElementById("companySearch")?.addEventListener("input", renderCompaniesTable);
+    document.getElementById("companySearch")?.addEventListener("input", () => renderCompaniesTable());
     document.getElementById("doLoginBtn")?.addEventListener("click", doLogin);
     document.getElementById("topChangePasswordBtn")?.addEventListener("click", openChangePasswordModal);
     document.getElementById("sidebarChangePasswordBtn")?.addEventListener("click", openChangePasswordModal);
@@ -741,6 +755,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("clearViolationsBtn")?.addEventListener("click", handleClearViolations);
     document.getElementById("refreshDataBtn")?.addEventListener("click", refreshData);
     document.getElementById("refreshLicensesBtn")?.addEventListener("click", loadLicenses);
+    document.getElementById("refreshCompaniesBtn")?.addEventListener("click", refreshCompanies);
     document.getElementById("confirmRenewBtn")?.addEventListener("click", confirmRenew);
     document.getElementById("confirmUpgradeBtn")?.addEventListener("click", confirmUpgrade);
     document.getElementById("refreshDeviceRequestsBtn")?.addEventListener("click", () => showToast("No requests", "info"));
