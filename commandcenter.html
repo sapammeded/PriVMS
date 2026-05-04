@@ -118,7 +118,7 @@
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <h1>🎯 VMS COMMAND</h1>
-            <p>Enterprise Control Center v4.0</p>
+            <p>Enterprise Control Center v5.0</p>
         </div>
         <div class="nav-item active" data-tab="dashboard"><span>📊</span> Dashboard</div>
         <div class="nav-item" data-tab="companies"><span>🏢</span> Companies</div>
@@ -170,9 +170,9 @@
 
         <div id="companiesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>🏢 Registered Companies</h3><div><input type="text" id="companySearch" placeholder="Search company..." style="width: 200px;"><button class="btn btn-info btn-sm" id="exportCompaniesExcelBtn">📊 Export Excel</button><button class="btn btn-primary btn-sm" id="exportCompaniesPdfBtn">📄 Export PDF</button><button class="btn btn-outline btn-sm" id="refreshCompaniesBtn">🔄 Refresh</button></div></div><div class="table-wrapper"><table id="companiesTable"><thead><tr><th>Company</th><th>PIC</th><th>Phone</th><th>Email</th><th>Package</th><th>License Key</th><th>Expiry</th><th>Status</th></tr></thead><tbody id="companiesTableBody"></tbody></table></div></div></div>
 
-        <div id="devicesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>📱 All Devices (Visitor Check-in)</h3><div><input type="text" id="deviceSearch" placeholder="Search device/company..." style="width: 220px;"><select id="deviceStatusFilter" style="width: 140px;"><option value="">All Status</option><option value="IN">IN</option><option value="OUT">OUT</option></select><button class="btn btn-info btn-sm" id="exportDevicesExcelBtn">📊 Export</button><button class="btn btn-primary btn-sm" id="exportDevicesPdfBtn">📄 PDF</button></div></div><div class="table-wrapper"><table id="devicesTable"><thead><tr><th>Device Name</th><th>Company</th><th>PIC</th><th>Check-in</th><th>Checkout</th><th>Status</th><th>Alert</th></tr></thead><tbody></tbody></table></div></div></div>
+        <div id="devicesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>📱 All Devices (Visitor Check-in)</h3><div><input type="text" id="deviceSearch" placeholder="Search device/company..." style="width: 220px;"><select id="deviceStatusFilter" style="width: 140px;"><option value="">All Status</option><option value="IN">IN</option><option value="OUT">OUT</option></select><button class="btn btn-info btn-sm" id="exportDevicesExcelBtn">📊 Export</button><button class="btn btn-primary btn-sm" id="exportDevicesPdfBtn">📄 PDF</button></div></div><div class="table-wrapper"><table id="devicesTable"><thead><tr><th>Device Name</th><th>Company</th><th>PIC</th><th>Check-in</th><th>Checkout</th><th>Status</th><th>Alert</th></tr></thead><tbody></tbody></td></div></div></div>
 
-        <div id="violationsTab" class="tab-pane"><div class="card"><div class="card-header"><h3>⚠️ Overstay Violations</h3><div><input type="text" id="violationSearch" placeholder="Search..."><button class="btn btn-danger btn-sm" id="clearViolationsBtn">🗑️ Clear All</button></div></div><div class="table-wrapper"><table id="violationsTable"><thead><tr><th>Company</th><th>Device</th><th>Violation Type</th><th>Details</th><th>Time</th></tr></thead><tbody></tbody><tr></div></div></div>
+        <div id="violationsTab" class="tab-pane"><div class="card"><div class="card-header"><h3>⚠️ Overstay Violations</h3><div><input type="text" id="violationSearch" placeholder="Search..."><button class="btn btn-danger btn-sm" id="clearViolationsBtn">🗑️ Clear All</button></div></div><div class="table-wrapper"><table id="violationsTable"><thead><tr><th>Company</th><th>Device</th><th>Violation Type</th><th>Details</th><th>Time</th></tr></thead><tbody></tbody></table></div></div></div>
 
         <div id="requestsTab" class="tab-pane"><div class="card"><div class="card-header"><h3>📝 Pending Approvals</h3><span id="pendingCount" class="badge badge-warning">0</span></div><div class="table-wrapper"><table id="requestsTable"><thead><tr><th>Company</th><th>Device ID</th><th>Device Name</th><th>Requested At</th><th>Actions</th></tr></thead><tbody></tbody></table></div></div></div>
 
@@ -182,7 +182,7 @@
 
         <div id="invoicesTab" class="tab-pane"><div class="card"><div class="card-header"><h3>💰 Invoices</h3><button class="btn btn-info btn-sm" id="exportInvoicesExcelBtn">📊 Export</button></div><div class="table-wrapper"><table id="invoicesTable"><thead><tr><th>Invoice #</th><th>Company</th><th>Amount</th><th>Status</th><th>Created</th></tr></thead><tbody><tr><td colspan="5" class="text-muted">No invoices</td></tr></tbody></table></div></div></div>
 
-        <div id="settingsTab" class="tab-pane"><div class="grid-2"><div class="card"><div class="card-header"><h3>👥 Admin Users</h3></div><div class="form-group"><label>New Username</label><input type="text" id="newAdminUser"></div><div class="form-group"><label>New Password</label><input type="password" id="newAdminPass"></div><div class="form-group"><label>Role</label><select id="newAdminRole"><option value="ADMIN">ADMIN</option><option value="SUPER_ADMIN">SUPER_ADMIN</option></select></div><button class="btn btn-primary" id="addAdminBtn">➕ Add Admin User</button><div style="margin-top:24px"><h4>Existing Admins</h4><div id="adminUsersList"></div></div></div><div class="card"><div class="card-header"><h3>ℹ️ System Info</h3></div><div id="systemInfo"><p>Version: v4.0 GAS</p><p>Status: <span class="badge badge-active">Online</span></p><p id="serverTime">-</p></div></div></div></div>
+        <div id="settingsTab" class="tab-pane"><div class="grid-2"><div class="card"><div class="card-header"><h3>👥 Admin Users</h3></div><div class="form-group"><label>New Username</label><input type="text" id="newAdminUser"></div><div class="form-group"><label>New Password</label><input type="password" id="newAdminPass"></div><div class="form-group"><label>Role</label><select id="newAdminRole"><option value="ADMIN">ADMIN</option><option value="SUPER_ADMIN">SUPER_ADMIN</option></select></div><button class="btn btn-primary" id="addAdminBtn">➕ Add Admin User</button><div style="margin-top:24px"><h4>Existing Admins</h4><div id="adminUsersList"></div></div></div><div class="card"><div class="card-header"><h3>ℹ️ System Info</h3></div><div id="systemInfo"><p>Version: v5.0 GAS</p><p>Status: <span class="badge badge-active">Online</span></p><p id="serverTime">-</p></div></div></div></div>
     </div>
 </div>
 
@@ -195,9 +195,12 @@
 <div class="toast-container" id="toastContainer"></div>
 
 <script>
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxI0gyyW2RfnH-trh25pna11czhUZOEobDA2jdiXlECyOTp1_LGrL7xxl_v5DsF1NQ6/exec";
+// ================= CONFIG =================
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfyJdAl6aLC35vLN1ES9QA19Kx8rlVXx0Yc9pBNFLKkixEmYF4gSVO50yhoZkdTvPeMw/exec";
+const SECRET = "OMNIGUARD_SECRET_2026";
 const SESSION_TIMEOUT_MS = 43200000;
 
+// ================= GLOBAL STATE =================
 let currentUser = null;
 let currentToken = null;
 let currentRole = null;
@@ -207,20 +210,65 @@ let licensesData = [];
 let packageChart = null;
 let refreshInterval = null;
 
-async function safeFetch(paramsObj) {
-    const params = new URLSearchParams(paramsObj);
-    const response = await fetch(APPS_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: params.toString()
+// ================= HELPER: SHA256 (untuk signature) =================
+async function sha256(str) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(str);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    return Array.from(new Uint8Array(hashBuffer))
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+}
+
+// ================= SAFE FETCH dengan RETRY + SIGNATURE =================
+async function safeFetch(paramsObj, retryCount = 0) {
+    const MAX_RETRY = 2;
+    
+    // Untuk admin endpoints, tidak perlu signature (sudah pakai secret)
+    // Tapi kita tetap kirim secret saja (backend akan validasi)
+    const timestamp = Date.now().toString();
+    const base = String(paramsObj.reg || "") + String(paramsObj.action) + timestamp + SECRET;
+    const sign = await sha256(base);
+    
+    const formData = new URLSearchParams({
+        ...paramsObj,
+        timestamp: timestamp,
+        sign: sign,
+        secret: SECRET
     });
-    let data;
+    
     try {
-        data = await response.json();
-    } catch (e) {
-        throw new Error("Invalid JSON response");
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        
+        const response = await fetch(APPS_SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: formData.toString(),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeout);
+        
+        if (!response.ok) throw new Error("Network error");
+        
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            throw new Error("Invalid JSON response");
+        }
+        
+        return data;
+        
+    } catch (err) {
+        if (retryCount < MAX_RETRY) {
+            await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+            return safeFetch(paramsObj, retryCount + 1);
+        }
+        console.error("SAFE FETCH ERROR:", err);
+        return { status: "error", message: err.message };
     }
-    return data;
 }
 
 function isSessionValid() {
@@ -254,6 +302,7 @@ function closeModal(modalId) {
     document.getElementById(modalId)?.classList.remove("active");
 }
 
+// ================= AUTH =================
 async function doLogin() {
     const username = document.getElementById("loginUser").value.trim();
     const password = document.getElementById("loginPass").value.trim();
@@ -261,8 +310,11 @@ async function doLogin() {
         showToast("Isi username & password", "error");
         return;
     }
+    showToast("Logging in...", "info");
+    
     try {
         const data = await safeFetch({ action: "admin_login", u: username, p: password });
+        
         if (data.status === "success") {
             currentUser = username;
             currentToken = data.token;
@@ -304,30 +356,29 @@ function logout() {
     location.reload();
 }
 
+// ================= DATA LOADING =================
 async function loadAllData() {
     if (syncLock || !currentToken) return;
     syncLock = true;
     try {
         const data = await safeFetch({ action: "admin_pull", token: currentToken });
-        if (data.status === "unauthorized") {
+        
+        if (data.status === "unauthorized" || data.status === "forbidden") {
             console.warn("Session expired, logging out");
             logout();
             return;
         }
         if (data.status !== "success") throw new Error("Server returned non-success");
+        
         const rows = data.data || [];
         devicesData = rows.slice(1).map(row => {
             const expRaw = row[8];
             let isExpired = false;
-            let expiryValid = false;
             if (expRaw) {
                 try {
                     const expDate = new Date(expRaw);
-                    expiryValid = !isNaN(expDate.getTime());
-                    isExpired = expiryValid && expDate < new Date();
-                } catch(e) {
-                    console.warn("Date parse error for:", expRaw);
-                }
+                    isExpired = !isNaN(expDate.getTime()) && expDate < new Date();
+                } catch(e) {}
             }
             return {
                 name: row[2] || "",
@@ -343,6 +394,7 @@ async function loadAllData() {
                 alert: isExpired ? "⚠️ EXPIRED" : ""
             };
         });
+        
         updateDashboard();
         renderDevicesTable();
         renderRecentViolations();
@@ -359,72 +411,88 @@ async function loadAllData() {
 async function loadLicenses() {
     if (!currentToken) return;
     try {
-        const data = await safeFetch({ action: "get_licenses", token: currentToken });
+        const data = await safeFetch({ action: "get_licenses" });
+        
         if (data.status === "success") {
             licensesData = data.data || [];
             renderLicensesTable();
             renderCompaniesTable();
+        } else if (data.status === "forbidden") {
+            console.warn("Invalid secret, check kode.gs deployment");
+            showToast("License system error", "error");
         }
     } catch (err) {
         console.error("LOAD LICENSES ERROR:", err);
     }
 }
 
+// ================= LICENSE OPERATIONS =================
 async function generateLicense(company, pic, phone, email, pkg) {
     try {
         const data = await safeFetch({
-            action: "generate_license", token: currentToken,
+            action: "generate_license",
             company, pic, phone, email, package: pkg
         });
         if (data.status === "success") {
-            showToast("License dibuat", "success");
+            showToast(`License dibuat: ${data.license_key}`, "success");
             await loadLicenses();
+            return true;
         } else {
-            showToast(data.message || "Gagal", "error");
+            showToast(data.message || "Gagal generate license", "error");
+            return false;
         }
     } catch (err) {
         console.error("GENERATE LICENSE ERROR:", err);
         showToast("Gagal generate license", "error");
+        return false;
     }
 }
 
 async function addAdminUser(username, password, role) {
     try {
         const data = await safeFetch({
-            action: "add_admin", token: currentToken,
+            action: "add_admin",
             username, password, role
         });
         if (data.status === "success") {
             showToast("Admin ditambahkan", "success");
+            return true;
         } else {
             showToast(data.message || "Gagal", "error");
+            return false;
         }
     } catch (err) {
         console.error("ADD ADMIN ERROR:", err);
         showToast("Gagal tambah admin", "error");
+        return false;
     }
 }
 
 async function clearViolations() {
     try {
-        const data = await safeFetch({ action: "clear_violations", token: currentToken });
+        const data = await safeFetch({ action: "clear_violations" });
         if (data.status === "success") {
             showToast("Violations dibersihkan", "success");
             await loadAllData();
+            return true;
         } else {
             showToast(data.message || "Gagal", "error");
+            return false;
         }
     } catch (err) {
         console.error("CLEAR VIOLATIONS ERROR:", err);
         showToast("Gagal bersihkan violations", "error");
+        return false;
     }
 }
 
 async function changePassword(oldPass, newPass) {
     try {
         const data = await safeFetch({
-            action: "change_password", token: currentToken,
-            old_password: oldPass, new_password: newPass
+            action: "change_password",
+            username: currentUser,
+            old_password: oldPass,
+            new_password: newPass
         });
         return data.status === "success";
     } catch (err) {
@@ -438,7 +506,7 @@ async function confirmRenew() {
     const months = document.getElementById("renewMonths").value;
     try {
         const data = await safeFetch({
-            action: "renew_license", token: currentToken,
+            action: "renew_license",
             company, months
         });
         if (data.status === "success") {
@@ -459,7 +527,7 @@ async function confirmUpgrade() {
     const newPackage = document.getElementById("upgradePackage").value;
     try {
         const data = await safeFetch({
-            action: "upgrade_license", token: currentToken,
+            action: "upgrade_license",
             company, new_package: newPackage
         });
         if (data.status === "success") {
@@ -475,6 +543,7 @@ async function confirmUpgrade() {
     }
 }
 
+// ================= RENDER FUNCTIONS =================
 function updateDashboard() {
     document.getElementById("statTotalDevices").innerText = devicesData.length;
     document.getElementById("statActiveDevices").innerText = devicesData.filter(d => d.status === "IN").length;
@@ -506,7 +575,6 @@ function renderDevicesTable() {
     `).join('');
 }
 
-// FIX: Companies Table membaca dari licensesData (bukan devicesData)
 function renderCompaniesTable() {
     const tbody = document.getElementById("companiesTableBody");
     if (!tbody) return;
@@ -526,7 +594,7 @@ function renderCompaniesTable() {
         return `
             <tr>
                 <td><strong>${escapeHtml(l.company)}</strong></td>
-                <td>${escapeHtml(l.pic)}</                <td>${escapeHtml(l.pic)}</td>
+                <td>${escapeHtml(l.pic)}</td>
                 <td>${escapeHtml(l.phone || '-')}</td>
                 <td>${escapeHtml(l.email || '-')}</td>
                 <td><span class="badge ${l.package === 'PRO' ? 'badge-pro' : (l.package === 'BASIC' ? 'badge-basic' : 'badge-demo')}">${escapeHtml(l.package)}</span></td>
@@ -602,6 +670,7 @@ function switchTab(tabId) {
 function refreshData() { loadAllData(); loadLicenses(); }
 function refreshCompanies() { loadLicenses(); }
 
+// ================= MODAL FUNCTIONS =================
 function openChangePasswordModal() {
     document.getElementById("changePasswordModal").style.display = "flex";
 }
@@ -689,6 +758,7 @@ async function handleClearViolations() {
     }
 }
 
+// ================= EXPORT FUNCTIONS =================
 function exportToExcel(data, filename, columns) {
     if (!window.XLSX) { showToast("Excel engine belum siap", "error"); return; }
     const ws = XLSX.utils.json_to_sheet(data);
@@ -729,6 +799,7 @@ function exportInvoicesToExcel() {
     exportToExcel([], "Invoices", ["Invoice #", "Company", "Amount", "Status", "Created"]);
 }
 
+// ================= INIT =================
 document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".nav-item").forEach(nav => {
         nav.addEventListener("click", () => {
@@ -769,6 +840,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (el) el.innerHTML = `Server Time: ${new Date().toLocaleString('id-ID')}`;
     }, 1000);
     document.getElementById("loginPass")?.addEventListener("keypress", (e) => { if (e.key === "Enter") doLogin(); });
+    
     const savedUser = localStorage.getItem("vms_admin_user");
     const savedToken = localStorage.getItem("vms_admin_token");
     const savedRole = localStorage.getItem("vms_admin_role");

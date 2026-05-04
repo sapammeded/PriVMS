@@ -71,6 +71,7 @@
         .queue-status { position: fixed; bottom: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.8); color: #ff9800; padding: 4px 12px; border-radius: 20px; font-size: 10px; font-family: monospace; pointer-events: none; }
         .license-badge { background: #fbbf24; color: #92400e; padding: 4px 12px; border-radius: 40px; font-size: 0.7rem; font-weight: 600; margin-left: 12px; }
         body.disable-interaction { pointer-events: none; opacity: 0.7; }
+        .qr-reader-region { margin: 0 auto; }
     </style>
 </head>
 <body>
@@ -135,6 +136,7 @@ var vmsSiteData = {
   names: { SITE_A: "SITE A", SITE_B: "SITE B", SITE_C: "SITE C" }
 };
 
+// ⚠️ GANTI URL INI DENGAN URL DEPLOYMENT APPS SCRIPT ANDA ⚠️
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxfyJdAl6aLC35vLN1ES9QA19Kx8rlVXx0Yc9pBNFLKkixEmYF4gSVO50yhoZkdTvPeMw/exec";  
 const SYNC_INTERVAL_MS = 10000;  
 
@@ -265,7 +267,6 @@ async function apiCall(params) {
             sign,
             ua: navigator.userAgent
         });
-console.log("SEND DATA:", Object.fromEntries(formData));
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 8000);
@@ -308,7 +309,7 @@ async function validateQRCode(qrData) { return await apiCall({ action: "validate
 
 async function pullFromSheet() {
   if (syncLock) return;
-  if (document.hidden) return; // boleh tetap dipakai
+  if (document.hidden) return;
 
   syncLock = true;
 
@@ -492,6 +493,7 @@ function renderLogTable() {
     } catch (e) { console.error("renderLogTable error:", e); }  
 }  
 
+// ================= QR SCAN PROCESS (FIXED) =================
 async function processScan(qrText) {  
     if (actionMutex) return false;
     if (globalScanLock) return false;
@@ -506,43 +508,82 @@ async function processScan(qrText) {
     globalScanLock = true;
     qrText = qrText.trim();  
     const mode = document.getElementById("scanMode").value;  
-    let reg = null;  
-    if (qrText.startsWith("REG")) {  
-        reg = qrText;  
-    } else {  
-        let validation = await validateQRCode(qrText);
-        if (validation.status === "success") {
-            reg = validation.data.reg;
-        } else if (qrText.startsWith("REG")) {
-            reg = qrText;
-        } else {
-            toast("QR tidak valid!", "error");
-            globalScanLock = false;
-            return false;
+    
+    // QR bisa berupa REG langsung atau format dengan prefix
+    let reg = null;
+    
+    // Cek apakah QR berisi format REGxxxxx
+    if (qrText.match(/^REG\d+/i)) {
+        reg = qrText;
+    } 
+    // Cek apakah QR berisi format REGxxxxx|VMS2026
+    else if (qrText.includes("|")) {
+        const parts = qrText.split("|");
+        if (parts[0].match(/^REG\d+/i)) {
+            reg = parts[0];
         }
     }
-    if (!reg) { toast("QR tidak valid!", "error"); globalScanLock = false; return false; }  
+    // Coba validasi via backend
+    else {
+        let validation = await validateQRCode(qrText);
+        if (validation.status === "success" && validation.data && validation.data.reg) {
+            reg = validation.data.reg;
+        }
+    }
+    
+    if (!reg) {
+        toast("QR tidak valid! Format harus REGxxxxx", "error");
+        globalScanLock = false;
+        return false;
+    }
+    
     const nowTime = Date.now();  
-    if (lastScanTime[reg] && nowTime - lastScanTime[reg] < SCAN_COOLDOWN_MS) { toast("Scan terlalu cepat", "warning"); globalScanLock = false; return false; }  
+    if (lastScanTime[reg] && nowTime - lastScanTime[reg] < SCAN_COOLDOWN_MS) { 
+        toast("Scan terlalu cepat", "warning"); 
+        globalScanLock = false; 
+        return false;
+    }  
     lastScanTime[reg] = nowTime;  
-    if (processingRegs.has(reg)) { toast("Sedang diproses", "warning"); globalScanLock = false; return false; }  
+    
+    if (processingRegs.has(reg)) { 
+        toast("Sedang diproses", "warning"); 
+        globalScanLock = false; 
+        return false;
+    }  
     processingRegs.add(reg);  
     actionMutex = true;  
+    
     try {  
         let siteKey = SITE_ID + "_" + reg;  
         let visitor = visitors[siteKey];  
         if (!visitor) {  
-            visitor = { nama: "Unknown", perusahaan: "", kategori: "UMUM", tujuan: "-", pic: "-", dept: "-", startDate: "", expDate: "", foto: "", sessions: [], currentStatus: "OUT", updatedAt: Date.now() };  
+            visitor = { 
+                nama: "Unknown", 
+                perusahaan: "", 
+                kategori: "UMUM", 
+                tujuan: "-", 
+                pic: "-", 
+                dept: "-", 
+                startDate: "", 
+                expDate: "", 
+                foto: "", 
+                sessions: [], 
+                currentStatus: "OUT", 
+                updatedAt: Date.now() 
+            };  
             visitors[siteKey] = visitor;  
         }  
+        
         let today = new Date();  
         let expDate = visitor.expDate ? new Date(visitor.expDate) : null;
         if (expDate && !isNaN(expDate.getTime())) {
             expDate.setHours(23, 59, 59, 999);
-            if (expDate < today) { toast("Visitor sudah expired!", "error"); return false; }
-        } else {
-            console.warn("EXP fallback used for:", reg);
+            if (expDate < today) { 
+                toast("Visitor sudah expired!", "error"); 
+                return false;
+            }
         }
+        
         if (mode === "CHECK_IN") {
             let hasOpen = visitor.sessions?.some(s => !s.checkOut);
             if (hasOpen) {
@@ -553,30 +594,34 @@ async function processScan(qrText) {
             if (result.status === "success") {
                 if (!visitor.sessions) visitor.sessions = [];
                 visitor.sessions.push({ checkIn: Date.now(), checkOut: null });
-                visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now() };
+                visitor.currentStatus = "IN";
+                visitor.updatedAt = Date.now();
+                visitors[siteKey] = visitor;
                 addLocalLog(reg, "CHECK_IN");
                 vibrate();
-                toast(`CHECK-IN ${visitor.nama} berhasil`, "success");
+                toast(`✅ CHECK-IN ${visitor.nama} berhasil`, "success");
             } else if (result.status === "already_in") {
                 toast("Sudah CHECK-IN!", "warning");
             } else {
                 addToQueue("checkin", reg);
-                toast("Masuk queue (offline/gagal)", "warning");
+                toast("⏳ Masuk queue (offline/gagal)", "warning");
             }
         } else {
             let result = await checkoutVisitor(reg);
             if (result.status === "success") {
                 let openSession = visitor.sessions?.find(s => !s.checkOut);
                 if (openSession) openSession.checkOut = Date.now();
-                visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now() };
+                visitor.currentStatus = "OUT";
+                visitor.updatedAt = Date.now();
+                visitors[siteKey] = visitor;
                 addLocalLog(reg, "CHECK_OUT");
                 vibrate();
-                toast(`CHECK-OUT ${visitor.nama} berhasil`, "success");
+                toast(`✅ CHECK-OUT ${visitor.nama} berhasil`, "success");
             } else if (result.status === "not_checked_in") {
                 toast("Belum CHECK-IN!", "warning");
             } else {
                 addToQueue("checkout", reg);
-                toast("Masuk queue", "warning");
+                toast("⏳ Masuk queue", "warning");
             }
         }
         renderDashboard();  
@@ -586,6 +631,7 @@ async function processScan(qrText) {
         return true;  
     } catch (e) {  
         console.error("processScan error:", e);  
+        toast("Error proses scan", "error");
         return false;  
     } finally {  
         actionMutex = false;  
@@ -597,8 +643,8 @@ async function processScan(qrText) {
 async function generateQRandShow(reg, data) {  
     try {
         let result = await generateQRCode(reg);  
-        let qrData = reg;  
-        if (result.status === "success" && result.data) qrData = result.data;  
+        // QR Data = REG number saja (clean)
+        let qrData = reg;
         let qrImage;  
         try {  
             qrImage = await QRCode.toDataURL(qrData, { width: 200 });  
@@ -707,19 +753,30 @@ async function initScanner() {
         currentCameraId = cameras[0].id;  
         scannerInstance = new Html5Qrcode("cameraPreview");  
         return true;  
-    } catch (err) { toast("Gagal inisialisasi kamera", "error"); console.error("initScanner error:", err); return false; }  
+    } catch (err) { toast("Gagal inisialisasi kamera: " + err.message, "error"); console.error("initScanner error:", err); return false; }  
 }  
 
 async function startScanner() {  
     if (isScanning) return;  
     if (!scannerInstance) { let init = await initScanner(); if (!init) return; }  
     try {  
-        await scannerInstance.start(currentCameraId, { fps: 10, qrbox: { width: 280, height: 280 }, aspectRatio: 1.0 },  
-            async (decodedText) => { if (!processingRegs.has(decodedText)) await processScan(decodedText); },  
-            (error) => { if (error && !error.includes("No MultiFormat Readers")) console.log("Scan error:", error); }  
+        await scannerInstance.start(currentCameraId, { 
+            fps: 10, 
+            qrbox: { width: 280, height: 280 }, 
+            aspectRatio: 1.0 
+        },  
+            async (decodedText) => { 
+                console.log("QR Scanned:", decodedText);
+                if (!processingRegs.has(decodedText)) await processScan(decodedText); 
+            },  
+            (error) => { 
+                if (error && !error.includes("No MultiFormat Readers") && !error.includes("No barcode")) {
+                    console.log("Scan error:", error); 
+                }
+            }  
         );  
         isScanning = true;  
-        toast("Scanner siap", "success");  
+        toast("Scanner siap, arahkan ke QR Code", "success");  
         if (cameraResetInterval) clearInterval(cameraResetInterval);  
         cameraResetInterval = setInterval(async () => { 
             if (!isScanning) return;
@@ -730,12 +787,23 @@ async function startScanner() {
                 console.warn("Camera reset fail", e);
             }
         }, 180000);
-    } catch (err) { toast("Gagal start kamera: " + err.message, "error"); console.error("startScanner error:", err); isScanning = false; }  
+    } catch (err) { 
+        toast("Gagal start kamera: " + err.message, "error"); 
+        console.error("startScanner error:", err); 
+        isScanning = false; 
+    }  
 }  
 
 async function stopScanner() {  
     if (cameraResetInterval) { clearInterval(cameraResetInterval); cameraResetInterval = null; }  
-    if (scannerInstance && isScanning) { try { await scannerInstance.stop(); await scannerInstance.clear(); } catch (err) { console.error("stopScanner error:", err); } }  
+    if (scannerInstance && isScanning) { 
+        try { 
+            await scannerInstance.stop(); 
+            await scannerInstance.clear(); 
+        } catch (err) { 
+            console.error("stopScanner error:", err); 
+        } 
+    }  
     isScanning = false;  
 }  
 
@@ -749,7 +817,7 @@ function setSite(site) {
     renderLogTable();  
 }  
 
-// ================= EVENT HANDLERS with LOCK UI =================
+// ================= EVENT HANDLERS =================
 document.getElementById("generateQRBtn").onclick = async () => {  
     if (actionMutex) return;  
     actionMutex = true;  
@@ -848,8 +916,25 @@ document.getElementById("walkinBtn").onclick = async () => {
     }  
 };  
 
-document.getElementById("startCamBtn").onclick = async () => { document.getElementById("cameraPreview").innerHTML = ""; await stopScanner(); if (scannerInstance) { try { await scannerInstance.clear(); } catch(e) { console.error("clear error:", e); } scannerInstance = null; } await startScanner(); };  
-document.getElementById("stopCamBtn").onclick = async () => { await stopScanner(); if (scannerInstance) { try { await scannerInstance.clear(); } catch(e) { console.error("clear error:", e); } scannerInstance = null; } toast("Kamera berhenti", "info"); };  
+document.getElementById("startCamBtn").onclick = async () => { 
+    document.getElementById("cameraPreview").innerHTML = ""; 
+    await stopScanner(); 
+    if (scannerInstance) { 
+        try { await scannerInstance.clear(); } catch(e) { console.error("clear error:", e); } 
+        scannerInstance = null; 
+    } 
+    await startScanner(); 
+};  
+
+document.getElementById("stopCamBtn").onclick = async () => { 
+    await stopScanner(); 
+    if (scannerInstance) { 
+        try { await scannerInstance.clear(); } catch(e) { console.error("clear error:", e); } 
+        scannerInstance = null; 
+    } 
+    toast("Kamera berhenti", "info"); 
+};  
+
 document.getElementById("uploadQrBtn").onclick = () => document.getElementById("uploadQrFile")?.click();  
 document.getElementById("uploadQrFile").onchange = async (e) => {  
     if (actionMutex) return;  
@@ -881,6 +966,7 @@ document.getElementById("uploadQrFile").onchange = async (e) => {
         lockUI(false);
     }  
 };  
+
 document.getElementById("manualProcess").onclick = async () => {  
     if (actionMutex) return;  
     actionMutex = true;  
@@ -888,9 +974,19 @@ document.getElementById("manualProcess").onclick = async () => {
     try {  
         let reg = document.getElementById("manualReg").value.trim();  
         const mode = document.getElementById("scanMode").value;  
+        
+        if (!reg || !reg.match(/^REG\d+/i)) {
+            toast("Format REG salah (contoh: REG20260504001)", "error");
+            return;
+        }
+        
         let siteKey = SITE_ID + "_" + reg;  
         let visitor = visitors[siteKey];  
-        if (!visitor) { toast("REG tidak ditemukan", "error"); return; }  
+        if (!visitor) { 
+            toast("REG tidak ditemukan", "error"); 
+            return; 
+        }  
+        
         let expDate = visitor.expDate ? new Date(visitor.expDate) : null;
         if (expDate && !isNaN(expDate.getTime())) {
             expDate.setHours(23, 59, 59, 999);
@@ -898,9 +994,8 @@ document.getElementById("manualProcess").onclick = async () => {
                 toast("QR sudah expired", "error");
                 return;
             }
-        } else {
-            console.warn("Exp fallback for manual:", reg);
         }
+        
         if (mode === "CHECK_IN") {
             let hasOpen = visitor.sessions?.some(s => !s.checkOut);
             if (hasOpen) {
@@ -911,10 +1006,14 @@ document.getElementById("manualProcess").onclick = async () => {
             if (result.status === "success") {
                 if (!visitor.sessions) visitor.sessions = [];
                 visitor.sessions.push({ checkIn: Date.now(), checkOut: null });
-                visitors[siteKey] = { ...visitor, currentStatus: "IN", updatedAt: Date.now() };
+                visitor.currentStatus = "IN";
+                visitor.updatedAt = Date.now();
+                visitors[siteKey] = visitor;
                 addLocalLog(reg, "CHECK_IN");
                 vibrate();
                 toast(`Check-in ${visitor.nama} success`, "success");
+            } else if (result.status === "already_in") {
+                toast("Sudah check-in!", "warning");
             } else {
                 addToQueue("checkin", reg);
                 toast("Masuk queue", "warning");
@@ -928,10 +1027,14 @@ document.getElementById("manualProcess").onclick = async () => {
             let result = await checkoutVisitor(reg);
             if (result.status === "success") {
                 openSession.checkOut = Date.now();
-                visitors[siteKey] = { ...visitor, currentStatus: "OUT", updatedAt: Date.now() };
+                visitor.currentStatus = "OUT";
+                visitor.updatedAt = Date.now();
+                visitors[siteKey] = visitor;
                 addLocalLog(reg, "CHECK_OUT");
                 vibrate();
                 toast(`Check-out ${visitor.nama} success`, "success");
+            } else if (result.status === "not_checked_in") {
+                toast("Belum check-in!", "warning");
             } else {
                 addToQueue("checkout", reg);
                 toast("Masuk queue", "warning");
